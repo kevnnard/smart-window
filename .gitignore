@@ -30,4 +30,5 @@ profile
 *.dSYM.zip
 *.dSYM
 SmartWindow.zip
+scripts/release-env.sh
 typescript
