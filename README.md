@@ -146,6 +146,28 @@ Notes:
 - on first launch, macOS may ask you to approve the app and grant Accessibility access
 - Homebrew uses the GitHub release artifact for `v0.1.0`
 
+## Maintainer Release Flow
+
+To publish a new version and update the Homebrew cask in one step:
+
+```bash
+./scripts/release-homebrew.sh 0.1.1 "Release notes here"
+```
+
+What it does:
+
+- builds a fresh `SmartWindow.zip`
+- computes the new SHA256
+- pushes the current repo
+- creates or updates the GitHub release tag
+- updates `kevnnard/homebrew-tap`
+- commits and pushes the cask update
+
+Notes:
+
+- run it from a clean git working tree
+- it expects the tap repo to exist locally as a sibling directory: `../homebrew-tap`
+
 ## Version
 
 This README describes the first main public release:
