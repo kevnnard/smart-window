@@ -1,8 +1,8 @@
 # SmartWindow
 
 <p align="center">
-  <a href="https://github.com/kevnnard/smart-window/releases/tag/v0.1.1">
-    <img alt="version" src="https://img.shields.io/badge/version-v0.1.1-2f855a?style=for-the-badge" />
+  <a href="https://github.com/kevnnard/smart-window/releases/tag/v0.1.2">
+    <img alt="version" src="https://img.shields.io/badge/version-v0.1.2-2f855a?style=for-the-badge" />
   </a>
   <a href="https://github.com/kevnnard/homebrew-tap">
     <img alt="homebrew" src="https://img.shields.io/badge/homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew" />
@@ -28,7 +28,7 @@
   <img width="1509" height="27" alt="SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
 </p>
 
-Current public release: `v0.1.1`
+Current public release: `v0.1.2`
 
 ## Why SmartWindow?
 
@@ -74,7 +74,7 @@ If you like the clarity of Polybar, Waybar, or tiling WM status bars but want to
 
 SmartWindow creates a floating `NSPanel` above the native menu bar area and keeps it visible across Spaces.
 
-In `v0.1.1`, it:
+In `v0.1.2`, it:
 
 - replaces the visual top bar with a custom blurred overlay
 - detects open windows through the macOS Accessibility API
@@ -110,7 +110,7 @@ Notes:
 
 - this installs `SmartWindow.app` into `/Applications`
 - on first launch, macOS may ask you to approve the app and grant Accessibility access
-- Homebrew uses the GitHub release artifact for `v0.1.1`
+- Homebrew uses the GitHub release artifact for `v0.1.2`
 
 ## Running From Source
 
@@ -180,7 +180,9 @@ Grant it at:
 │       ├── SettingsView.swift
 │       └── TabBarView.swift
 └── scripts/
-    └── install-app.sh
+    ├── build-release-zip.sh
+    ├── install-app.sh
+    └── release-homebrew.sh
 ```
 
 ## Maintainer Release Flow
@@ -188,12 +190,14 @@ Grant it at:
 To publish a new version and update the Homebrew cask in one step:
 
 ```bash
-./scripts/release-homebrew.sh 0.1.1 "Release notes here"
+./scripts/release-homebrew.sh 0.1.2 "Release notes here"
 ```
 
 What it does:
 
 - builds a fresh `SmartWindow.zip`
+- signs the app if `SMARTWINDOW_CODESIGN_IDENTITY` is set
+- notarizes and staples the app if `SMARTWINDOW_NOTARY_PROFILE` is set
 - computes the new SHA256
 - pushes the current repo
 - creates or updates the GitHub release tag
@@ -204,6 +208,27 @@ Notes:
 
 - run it from a clean git working tree
 - it expects the tap repo to exist locally as a sibling directory: `../homebrew-tap`
+
+Recommended for stable Accessibility / window-management permissions across updates:
+
+```bash
+export SMARTWINDOW_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export SMARTWINDOW_NOTARY_PROFILE="smartwindow-notary"
+./scripts/release-homebrew.sh 0.1.2 "Release notes here"
+```
+
+Create the notary profile once with:
+
+```bash
+xcrun notarytool store-credentials "smartwindow-notary" \
+  --apple-id "you@example.com" \
+  --team-id "TEAMID" \
+  --password "app-specific-password"
+```
+
+If you only want local signing for development installs, you can set `SMARTWINDOW_CODESIGN_IDENTITY` when running `./scripts/install-app.sh`.
+
+This repo also includes `scripts/release-env.example.sh` so you can copy it to `scripts/release-env.sh`, source it, and keep the signing identity/profile in one place.
 
 ## Roadmap
 

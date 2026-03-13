@@ -198,7 +198,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("About")
 
-            infoRow("Version", value: "0.1.1")
+            infoRow("Version", value: "0.1.2")
             infoRow("Behavior", value: "Runs as a menu bar utility")
             infoRow("Permissions", value: "Accessibility")
         }
