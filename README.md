@@ -118,22 +118,33 @@ Grant it at:
 
 `System Settings -> Privacy & Security -> Accessibility`
 
-## Homebrew
+## Install With Homebrew
 
-Yes, this can be distributed with Homebrew, but the normal flow is:
+SmartWindow is distributed as a Homebrew Cask.
 
-1. publish the project on GitHub
-2. create a tagged release like `v0.1.0`
-3. attach or generate a stable `.app` / zip artifact
-4. create a Homebrew Cask or personal tap
+```bash
+brew tap kevnnard/tap
+brew install --cask smartwindow
+```
 
-For this app, a Homebrew Cask is the better fit than a regular formula because this is a GUI macOS app bundle, not just a CLI binary.
+If you already tapped the repo and want upgrades later:
 
-If you want, the next step after GitHub can be preparing:
+```bash
+brew update
+brew upgrade --cask smartwindow
+```
 
-- a release zip for `SmartWindow.app`
-- a Homebrew Cask file
-- a tap repository layout
+To uninstall:
+
+```bash
+brew uninstall --cask smartwindow
+```
+
+Notes:
+
+- this installs `SmartWindow.app` into `/Applications`
+- on first launch, macOS may ask you to approve the app and grant Accessibility access
+- Homebrew uses the GitHub release artifact for `v0.1.0`
 
 ## Version
 
