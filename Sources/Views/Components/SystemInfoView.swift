@@ -2,9 +2,10 @@ import SwiftUI
 
 // MARK: - SystemInfoView
 
-/// Right side of the bar: RAM, CPU, MIC, VOL, Date, Battery — polybar style.
+/// Right side of the bar: RAM, CPU, GPU, MIC, VOL, Battery, Date, extra timezones — polybar style.
 struct SystemInfoView: View {
     @EnvironmentObject var systemMonitor: SystemMonitorService
+    @ObservedObject private var settings = AppSettings.shared
 
     @State private var currentTime = Date()
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -51,21 +52,28 @@ struct SystemInfoView: View {
                 .fill(BarTheme.separator)
                 .frame(width: 1, height: 14)
 
-            // Date + Time
-            Text(currentTime, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(BarTheme.badgeDate)
+            // Battery (moved before date)
+            BatteryBadge(
+                level: systemMonitor.batteryLevel,
+                isCharging: systemMonitor.isCharging
+            )
 
             // Separator
             Rectangle()
                 .fill(BarTheme.separator)
                 .frame(width: 1, height: 14)
 
-            // Battery
-            BatteryBadge(
-                level: systemMonitor.batteryLevel,
-                isCharging: systemMonitor.isCharging
-            )
+            // Date + Time (local)
+            Text(currentTime, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(BarTheme.badgeDate)
+
+            // Extra timezones — subtle style, shown last
+            ForEach(settings.extraTimezones, id: \.self) { tzId in
+                if let tz = TimeZone(identifier: tzId) {
+                    ExtraTimezoneBadge(date: currentTime, timeZone: tz)
+                }
+            }
         }
         .onReceive(timer) { currentTime = $0 }
     }
@@ -137,5 +145,41 @@ struct BatteryBadge: View {
             RoundedRectangle(cornerRadius: 3)
                 .fill(batteryColor.opacity(0.12))
         )
+    }
+}
+
+// MARK: - ExtraTimezoneBadge
+
+/// A subtle, compact timezone clock shown after the main date.
+struct ExtraTimezoneBadge: View {
+    let date: Date
+    let timeZone: TimeZone
+
+    /// Short city label from the timezone identifier (e.g. "New York" from "America/New_York").
+    private var cityLabel: String {
+        let raw = timeZone.identifier.components(separatedBy: "/").last ?? timeZone.abbreviation() ?? "?"
+        return raw.replacingOccurrences(of: "_", with: " ")
+    }
+
+    /// Format the time in the given timezone.
+    private var formattedTime: String {
+        let fmt = DateFormatter()
+        fmt.timeZone = timeZone
+        fmt.dateFormat = "h:mm a"
+        return fmt.string(from: date)
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(cityLabel)
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundStyle(BarTheme.inactiveText.opacity(0.5))
+
+            Text(formattedTime)
+                .font(.system(size: 9, weight: .regular, design: .monospaced))
+                .foregroundStyle(BarTheme.badgeDate.opacity(0.45))
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1)
     }
 }

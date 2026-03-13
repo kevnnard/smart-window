@@ -107,8 +107,7 @@ struct MenuBarView: View {
             }
 
             menuButton(icon: "gearshape", title: "Open Settings") {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                NSApp.activate(ignoringOtherApps: true)
+                SmartWindowDelegate.shared?.showSettingsWindow(nil)
             }
         }
         .padding(.vertical, 8)

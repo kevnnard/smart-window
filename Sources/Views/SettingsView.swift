@@ -4,18 +4,28 @@ import SwiftUI
 
 struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
+    @State private var timezoneSearch = ""
+
+    /// All known timezone identifiers, filtered by search text.
+    private var filteredTimezones: [String] {
+        let all = TimeZone.knownTimeZoneIdentifiers.sorted()
+        if timezoneSearch.isEmpty { return all }
+        let query = timezoneSearch.lowercased()
+        return all.filter { $0.lowercased().contains(query) }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerCard
                 preferencesCard
+                timezonesCard
                 shortcutsCard
                 aboutCard
             }
             .padding(20)
         }
-        .frame(width: 460, height: 420)
+        .frame(width: 460, height: 520)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -76,6 +86,95 @@ struct SettingsView: View {
 
                 Toggle("", isOn: $settings.launchAtLogin)
                     .labelsHidden()
+            }
+        }
+        .padding(18)
+        .background(cardBackground)
+    }
+
+    private var timezonesCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle("Extra Timezones")
+
+            Text("Additional clocks shown at the end of the bar, styled subtly.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            // Current extra timezones
+            if !settings.extraTimezones.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(settings.extraTimezones, id: \.self) { tz in
+                        HStack {
+                            Text(tz.replacingOccurrences(of: "_", with: " "))
+                                .font(.system(size: 12))
+                            Spacer()
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    settings.extraTimezones.removeAll { $0 == tz }
+                                }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+
+            // Add timezone
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+
+                TextField("Search timezone…", text: $timezoneSearch)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            if !timezoneSearch.isEmpty {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(filteredTimezones.prefix(8), id: \.self) { tz in
+                            Button {
+                                if !settings.extraTimezones.contains(tz) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        settings.extraTimezones.append(tz)
+                                    }
+                                }
+                                timezoneSearch = ""
+                            } label: {
+                                HStack {
+                                    Text(tz.replacingOccurrences(of: "_", with: " "))
+                                        .font(.system(size: 12))
+                                    Spacer()
+                                    Image(systemName: "plus.circle")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.green.opacity(0.7))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(.plain)
+
+                            if tz != filteredTimezones.prefix(8).last {
+                                Divider().opacity(0.3)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 160)
+                .background(Color.primary.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(18)

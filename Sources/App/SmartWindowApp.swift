@@ -17,11 +17,6 @@ struct SmartWindowApp: App {
             Image(systemName: "rectangle.split.3x1")
         }
         .menuBarExtraStyle(.window)
-
-        // Settings window
-        Settings {
-            SettingsView()
-        }
     }
 }
 
@@ -30,12 +25,20 @@ struct SmartWindowApp: App {
 /// App delegate that boots the tab bar on launch.
 @MainActor
 final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    static weak var shared: SmartWindowDelegate?
+
     let windowManager = WindowManager.shared
     let overlayController = OverlayPanelController()
     let hotKeyService = HotKeyService.shared
     let systemMonitor = SystemMonitorService()
     let nowPlaying = NowPlayingService()
     private var cancellables = Set<AnyCancellable>()
+    private var settingsWindowController: NSWindowController?
+
+    override init() {
+        super.init()
+        SmartWindowDelegate.shared = self
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run as menu-bar-only app (no dock icon)
@@ -87,5 +90,30 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyService.unregisterHotKeys()
+    }
+
+    @objc func showSettingsWindow(_ sender: Any?) {
+        let controller = settingsWindowController ?? makeSettingsWindowController()
+        settingsWindowController = controller
+        controller.showWindow(sender)
+        controller.window?.makeKeyAndOrderFront(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func makeSettingsWindowController() -> NSWindowController {
+        let rootView = SettingsView()
+        let hostingController = NSHostingController(rootView: rootView)
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "SmartWindow Settings"
+        window.setContentSize(NSSize(width: 460, height: 520))
+        window.minSize = NSSize(width: 460, height: 520)
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        return NSWindowController(window: window)
     }
 }
