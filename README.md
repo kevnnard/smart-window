@@ -1,8 +1,8 @@
 # SmartWindow
 
 <p align="center">
-  <a href="https://github.com/kevnnard/smart-window/releases/tag/v0.1.0">
-    <img alt="version" src="https://img.shields.io/badge/version-v0.1.0-2f855a?style=for-the-badge" />
+  <a href="https://github.com/kevnnard/smart-window/releases/tag/v0.1.1">
+    <img alt="version" src="https://img.shields.io/badge/version-v0.1.1-2f855a?style=for-the-badge" />
   </a>
   <a href="https://github.com/kevnnard/homebrew-tap">
     <img alt="homebrew" src="https://img.shields.io/badge/homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew" />
@@ -28,7 +28,7 @@
   <img width="1509" height="27" alt="SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
 </p>
 
-Current public release: `v0.1.0`
+Current public release: `v0.1.1`
 
 ## Why SmartWindow?
 
@@ -74,7 +74,7 @@ If you like the clarity of Polybar, Waybar, or tiling WM status bars but want to
 
 SmartWindow creates a floating `NSPanel` above the native menu bar area and keeps it visible across Spaces.
 
-In `v0.1.0`, it:
+In `v0.1.1`, it:
 
 - replaces the visual top bar with a custom blurred overlay
 - detects open windows through the macOS Accessibility API
@@ -110,7 +110,7 @@ Notes:
 
 - this installs `SmartWindow.app` into `/Applications`
 - on first launch, macOS may ask you to approve the app and grant Accessibility access
-- Homebrew uses the GitHub release artifact for `v0.1.0`
+- Homebrew uses the GitHub release artifact for `v0.1.1`
 
 ## Running From Source
 
