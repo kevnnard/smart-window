@@ -12,16 +12,12 @@
   </a>
 </p>
 
-SmartWindow is a macOS menu bar replacement inspired by Polybar and Waybar.
-
-It renders a custom top bar across your screens, shows numbered tabs for open windows on the left, and system status on the right. It is built for people who want faster window switching on macOS with a more tiling-WM-like feel.
-
 <p align="center">
   <img src="Resources/AppIcon.iconset/icon_512x512.png" alt="SmartWindow icon" width="160" />
 </p>
 
 <p align="center">
-  Polybar-style top bar for macOS with numbered window tabs, system widgets, media info, and multi-monitor support.
+  SmartWindow is a macOS menu bar replacement inspired by Polybar and Waybar, built for faster window switching and a cleaner tiling-WM-like workflow on Apple desktops.
 </p>
 
 <p align="center">
@@ -33,6 +29,19 @@ It renders a custom top bar across your screens, shows numbered tabs for open wi
 </p>
 
 Current public release: `v0.1.0`
+
+## Why SmartWindow?
+
+macOS gives you powerful apps, but window switching still feels slower and less legible than it should.
+
+SmartWindow puts the information you actually need at the top of every screen:
+
+- numbered tabs for open windows, so switching feels immediate instead of fuzzy
+- direct click-to-focus behavior, plus keyboard shortcuts for fast muscle-memory workflows
+- system status and now playing info in the same bar, without living in the Dock or a crowded native menu bar
+- per-monitor behavior that feels closer to a lightweight window manager than a typical utility app
+
+If you like the clarity of Polybar, Waybar, or tiling WM status bars but want to stay on macOS, SmartWindow is built for that gap.
 
 ## Highlights
 
@@ -65,49 +74,43 @@ Current public release: `v0.1.0`
 
 SmartWindow creates a floating `NSPanel` above the native menu bar area and keeps it visible across Spaces.
 
-Main behavior in `v0.1.0`:
+In `v0.1.0`, it:
 
-- Replaces the visual top bar with a custom blurred overlay
-- Detects open windows through the macOS Accessibility API
-- Lets you switch windows by clicking tabs or using hotkeys
-- Supports multiple screens with one bar per monitor
-- Hides only the affected bar when an app enters fullscreen on one monitor
-- Shows the current playing track when media is active
-- Includes a menu bar dropdown and a polished settings window
+- replaces the visual top bar with a custom blurred overlay
+- detects open windows through the macOS Accessibility API
+- lets you switch windows by clicking tabs or using hotkeys
+- supports multiple screens with one bar per monitor
+- hides only the affected bar when an app enters fullscreen on one monitor
+- shows the current playing track when media is active
+- includes a menu bar dropdown and a polished settings window
 
-## Project Structure
+## Install With Homebrew
 
-```text
-.
-├── Package.swift
-├── README.md
-├── LICENSE
-├── Resources/
-│   ├── AppIcon.icns
-│   └── Info.plist
-├── Sources/
-│   ├── App/
-│   │   └── SmartWindowApp.swift
-│   ├── Models/
-│   │   ├── AppSettings.swift
-│   │   └── WindowInfo.swift
-│   ├── Services/
-│   │   ├── AccessibilityService.swift
-│   │   ├── HotKeyService.swift
-│   │   ├── NowPlayingService.swift
-│   │   ├── SystemMonitorService.swift
-│   │   └── WindowManager.swift
-│   └── Views/
-│       ├── Components/
-│       │   ├── MiniTabView.swift
-│       │   └── SystemInfoView.swift
-│       ├── MenuBarView.swift
-│       ├── OverlayPanel.swift
-│       ├── SettingsView.swift
-│       └── TabBarView.swift
-└── scripts/
-    └── install-app.sh
+SmartWindow is distributed as a Homebrew Cask.
+
+```bash
+brew tap kevnnard/tap
+brew install --cask smartwindow
 ```
+
+If you already tapped the repo and want upgrades later:
+
+```bash
+brew update
+brew upgrade --cask smartwindow
+```
+
+To uninstall:
+
+```bash
+brew uninstall --cask smartwindow
+```
+
+Notes:
+
+- this installs `SmartWindow.app` into `/Applications`
+- on first launch, macOS may ask you to approve the app and grant Accessibility access
+- Homebrew uses the GitHub release artifact for `v0.1.0`
 
 ## Running From Source
 
@@ -146,33 +149,39 @@ Grant it at:
 
 `System Settings -> Privacy & Security -> Accessibility`
 
-## Install With Homebrew
+## Project Structure
 
-SmartWindow is distributed as a Homebrew Cask.
-
-```bash
-brew tap kevnnard/tap
-brew install --cask smartwindow
+```text
+.
+├── Package.swift
+├── README.md
+├── LICENSE
+├── Resources/
+│   ├── AppIcon.icns
+│   └── Info.plist
+├── Sources/
+│   ├── App/
+│   │   └── SmartWindowApp.swift
+│   ├── Models/
+│   │   ├── AppSettings.swift
+│   │   └── WindowInfo.swift
+│   ├── Services/
+│   │   ├── AccessibilityService.swift
+│   │   ├── HotKeyService.swift
+│   │   ├── NowPlayingService.swift
+│   │   ├── SystemMonitorService.swift
+│   │   └── WindowManager.swift
+│   └── Views/
+│       ├── Components/
+│       │   ├── MiniTabView.swift
+│       │   └── SystemInfoView.swift
+│       ├── MenuBarView.swift
+│       ├── OverlayPanel.swift
+│       ├── SettingsView.swift
+│       └── TabBarView.swift
+└── scripts/
+    └── install-app.sh
 ```
-
-If you already tapped the repo and want upgrades later:
-
-```bash
-brew update
-brew upgrade --cask smartwindow
-```
-
-To uninstall:
-
-```bash
-brew uninstall --cask smartwindow
-```
-
-Notes:
-
-- this installs `SmartWindow.app` into `/Applications`
-- on first launch, macOS may ask you to approve the app and grant Accessibility access
-- Homebrew uses the GitHub release artifact for `v0.1.0`
 
 ## Maintainer Release Flow
 
@@ -203,12 +212,6 @@ Notes:
 - add real launch-at-login support behind the existing settings toggle
 - add richer settings for visual density and bar behavior
 - publish follow-up releases after the notch UI is fully dialed in
-
-## Version
-
-This README describes the first main public release:
-
-`v0.1.0`
 
 ## License
 
