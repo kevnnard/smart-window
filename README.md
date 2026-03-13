@@ -1,5 +1,17 @@
 # SmartWindow
 
+<p align="center">
+  <a href="https://github.com/kevnnard/smart-window/releases/tag/v0.1.0">
+    <img alt="version" src="https://img.shields.io/badge/version-v0.1.0-2f855a?style=for-the-badge" />
+  </a>
+  <a href="https://github.com/kevnnard/homebrew-tap">
+    <img alt="homebrew" src="https://img.shields.io/badge/homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew" />
+  </a>
+  <a href="./LICENSE">
+    <img alt="license" src="https://img.shields.io/badge/license-non--commercial-blue?style=for-the-badge" />
+  </a>
+</p>
+
 SmartWindow is a macOS menu bar replacement inspired by Polybar and Waybar.
 
 It renders a custom top bar across your screens, shows numbered tabs for open windows on the left, and system status on the right. It is built for people who want faster window switching on macOS with a more tiling-WM-like feel.
@@ -183,6 +195,14 @@ Notes:
 
 - run it from a clean git working tree
 - it expects the tap repo to exist locally as a sibling directory: `../homebrew-tap`
+
+## Roadmap
+
+- refine notch-safe layout so tabs never feel cramped or visually shifted
+- improve tab overflow behavior when many windows are open
+- add real launch-at-login support behind the existing settings toggle
+- add richer settings for visual density and bar behavior
+- publish follow-up releases after the notch UI is fully dialed in
 
 ## Version
 
