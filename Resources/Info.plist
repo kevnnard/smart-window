@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Bundle Info -->
+    <key>CFBundleName</key>
+    <string>SmartWindow</string>
+    <key>CFBundleDisplayName</key>
+    <string>SmartWindow</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.kevnnard.smartwindow</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>SmartWindow</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    
+    <!-- macOS Requirements -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    
+    <!-- App should run as agent (no Dock icon by default) -->
+    <key>LSUIElement</key>
+    <true/>
+    
+    <!-- Accessibility Permission Description -->
+    <key>NSAccessibilityUsageDescription</key>
+    <string>SmartWindow needs Accessibility access to detect and manage your open windows, read window titles, and switch between them.</string>
+    
+    <!-- Supports Retina -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    
+    <!-- App Transport Security (allow all for future features) -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+</dict>
+</plist>
