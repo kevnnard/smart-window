@@ -60,14 +60,18 @@ else
 fi
 
 printf 'Updating Homebrew cask...\n'
-python3 - <<PY
+export SMARTWINDOW_CASK_PATH="$CASK_PATH"
+export SMARTWINDOW_RELEASE_VERSION="$VERSION"
+export SMARTWINDOW_RELEASE_SHA256="$SHA256"
+python3 - <<'PY'
 from pathlib import Path
+import os
 import re
 
-path = Path(${CASK_PATH@Q})
+path = Path(os.environ["SMARTWINDOW_CASK_PATH"])
 text = path.read_text()
-text = re.sub(r'version\s+"[^"]+"', f'version "${VERSION}"', text)
-text = re.sub(r'sha256\s+"[0-9a-f]+"', f'sha256 "${SHA256}"', text)
+text = re.sub(r'version\s+"[^"]+"', f'version "{os.environ["SMARTWINDOW_RELEASE_VERSION"]}"', text)
+text = re.sub(r'sha256\s+"[0-9a-f]+"', f'sha256 "{os.environ["SMARTWINDOW_RELEASE_SHA256"]}"', text)
 path.write_text(text)
 PY
 
