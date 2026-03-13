@@ -1,14 +1,24 @@
 # SmartWindow
 
-<img width="1512" height="982" alt="Screenshot 2026-03-12 at 11 38 55 PM" src="https://github.com/user-attachments/assets/4928ae2f-a722-41e8-9adf-6c85ff78ce71" />
-
-<img width="748" height="18" alt="image" src="https://github.com/user-attachments/assets/9ce56448-bfa2-461b-b00d-f1cf312990a7" />
-
-<img width="1509" height="27" alt="image" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
-
 SmartWindow is a macOS menu bar replacement inspired by Polybar and Waybar.
 
 It renders a custom top bar across your screens, shows numbered tabs for open windows on the left, and system status on the right. It is built for people who want faster window switching on macOS with a more tiling-WM-like feel.
+
+<p align="center">
+  <img src="Resources/AppIcon.iconset/icon_512x512.png" alt="SmartWindow icon" width="160" />
+</p>
+
+<p align="center">
+  Polybar-style top bar for macOS with numbered window tabs, system widgets, media info, and multi-monitor support.
+</p>
+
+<p align="center">
+  <img width="1512" height="982" alt="SmartWindow main screenshot" src="https://github.com/user-attachments/assets/4928ae2f-a722-41e8-9adf-6c85ff78ce71" />
+</p>
+
+<p align="center">
+  <img width="1509" height="27" alt="SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
+</p>
 
 Current public release: `v0.1.0`
 
