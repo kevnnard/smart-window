@@ -14,7 +14,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("temperatureUnit") var temperatureUnit: String = "C"
     
     @AppStorage("geminiPath") var geminiPath: String = "/opt/homebrew/bin/gemini"
-    @AppStorage("isAIMonitoringEnabled") var isAIMonitoringEnabled: Bool = true
+    @AppStorage("isAIMonitoringEnabled") var isAIMonitoringEnabled: Bool = false
     
     @AppStorage("claudeProTokens") var claudeProTokens: Int = 0
     @AppStorage("claudeFlashTokens") var claudeFlashTokens: Int = 0
@@ -22,6 +22,11 @@ final class AppSettings: ObservableObject {
     @AppStorage("claudeProLimit") var claudeProLimit: Int = 1000000
     @AppStorage("claudeFlashLimit") var claudeFlashLimit: Int = 1000000
     @AppStorage("claudeFlashLiteLimit") var claudeFlashLiteLimit: Int = 1000000
+    
+    @AppStorage("claudeDailyUsage") var claudeDailyUsage: Int = 0
+    @AppStorage("claudeDailyLimit") var claudeDailyLimit: Int = 1000
+    @AppStorage("claudeWeeklyUsage") var claudeWeeklyUsage: Int = 0
+    @AppStorage("claudeWeeklyLimit") var claudeWeeklyLimit: Int = 7000
 
     var geminiApiKey: String? {
         get { KeychainManager.shared.load(key: "geminiApiKey") }
@@ -91,21 +96,21 @@ final class AppSettings: ObservableObject {
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             self.widgetOrder = decoded
         } else {
-            self.widgetOrder = ["RAM", "CPU", "Temperature", "GPU", "MIC", "VOL", "Battery"]
+            self.widgetOrder = ["RAM", "CPU", "Temperature", "GPU", "Battery"]
         }
         
         if let data = UserDefaults.standard.data(forKey: "widgetVisibility"),
            let decoded = try? JSONDecoder().decode([String: Bool].self, from: data) {
             self.widgetVisibility = decoded
         } else {
-            self.widgetVisibility = ["RAM": true, "CPU": true, "Temperature": true, "GPU": true, "MIC": true, "VOL": true, "Battery": true]
+            self.widgetVisibility = ["RAM": true, "CPU": true, "Temperature": true, "GPU": true, "Battery": true]
         }
         
         if let data = UserDefaults.standard.data(forKey: "separatorPositions"),
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             self.separatorPositions = decoded
         } else {
-            self.separatorPositions = ["VOL", "Battery"]
+            self.separatorPositions = ["Battery"]
         }
         
         if let data = UserDefaults.standard.data(forKey: "enabledProviders"),
