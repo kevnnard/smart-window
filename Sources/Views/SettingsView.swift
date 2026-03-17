@@ -95,7 +95,7 @@ struct GeneralSettingsDetailView: View {
             }
             
             Section(header: Label("About", systemImage: "info.circle")) {
-                LabeledContent("Version", value: "0.1.3")
+                LabeledContent("Version", value: "0.2.0")
             }
         }
         .formStyle(.grouped)
