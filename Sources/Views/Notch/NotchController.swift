@@ -14,9 +14,17 @@ final class NotchController: NSObject, ObservableObject {
     }
     
     func show() {
+        // Safety check: ensure screens are available
+        guard !NSScreen.screens.isEmpty else {
+            print("[NotchController] No screens available, skipping panel creation")
+            return
+        }
+        
         if panels.isEmpty {
             createPanels()
         }
+        
+        print("[NotchController] Showing \(panels.count) notch panel(s)")
         for panel in panels.values {
             panel.orderFront(nil)
         }
@@ -32,6 +40,14 @@ final class NotchController: NSObject, ObservableObject {
     private func createPanels() {
         // Remove existing panels first
         panels.removeAll()
+        
+        // Safety check: ensure screens are available
+        guard !NSScreen.screens.isEmpty else {
+            print("[NotchController] No screens available for panel creation")
+            return
+        }
+        
+        print("[NotchController] Creating panels for \(NSScreen.screens.count) screen(s)")
         
         // Create a panel for EACH screen
         for screen in NSScreen.screens {
@@ -159,12 +175,16 @@ class NotchOverlayWindow: NSPanel {
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: backingStoreType, defer: flag)
         
-        self.level = .screenSaver // High enough to render above other things
+        // Must be above EVERYTHING including the native menu bar.
+        // .screenSaver is one of the highest levels available.
+        self.level = .screenSaver
         self.backgroundColor = .clear
         self.isOpaque = false
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         self.ignoresMouseEvents = false
+        
+        print("[NotchOverlayWindow] Created with level: \(self.level.rawValue)")
     }
     
     override var canBecomeKey: Bool {
