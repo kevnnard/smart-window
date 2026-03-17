@@ -105,6 +105,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     private var observers: [NSObjectProtocol] = []
+    private var fallbackTimer: Timer?
 
     init() {
         // Delay registration to avoid dispatch_once issues during SwiftUI layout
@@ -146,6 +147,13 @@ final class NowPlayingService: ObservableObject {
         // Fetch initial state
         fetchNowPlaying()
         fetchPlayingState()
+
+        // Setup a timer to periodically poll via AppleScript in case notifications fail (common with Spotify)
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchAppleScriptFallback()
+            }
+        }
     }
 
     // MARK: - Fetch Data
@@ -154,9 +162,17 @@ final class NowPlayingService: ObservableObject {
         MediaRemoteLoader.getNowPlayingInfo(queue: .main) { [weak self] info in
             Task { @MainActor in
                 guard let self else { return }
-                self.trackTitle = info[kMRMediaRemoteNowPlayingInfoTitle] as? String ?? ""
-                self.artistName = info[kMRMediaRemoteNowPlayingInfoArtist] as? String ?? ""
-                self.albumName  = info[kMRMediaRemoteNowPlayingInfoAlbum] as? String ?? ""
+                let title = info[kMRMediaRemoteNowPlayingInfoTitle] as? String ?? ""
+                let artist = info[kMRMediaRemoteNowPlayingInfoArtist] as? String ?? ""
+                let album  = info[kMRMediaRemoteNowPlayingInfoAlbum] as? String ?? ""
+                
+                if title.isEmpty {
+                    self.fetchAppleScriptFallback()
+                } else {
+                    self.trackTitle = title
+                    self.artistName = artist
+                    self.albumName = album
+                }
             }
         }
     }
@@ -164,7 +180,57 @@ final class NowPlayingService: ObservableObject {
     private func fetchPlayingState() {
         MediaRemoteLoader.getIsPlaying(queue: .main) { [weak self] playing in
             Task { @MainActor in
-                self?.isPlaying = playing
+                guard let self else { return }
+                if !playing {
+                    self.fetchAppleScriptFallback()
+                } else {
+                    self.isPlaying = playing
+                }
+            }
+        }
+    }
+
+    private func fetchAppleScriptFallback() {
+        Task.detached { [weak self] in
+            let scriptSource = """
+            if application "Spotify" is running then
+                tell application "Spotify"
+                    if player state is playing then
+                        return "PLAYING|" & name of current track & "|" & artist of current track
+                    else
+                        return "PAUSED"
+                    end if
+                end tell
+            else if application "Music" is running then
+                tell application "Music"
+                    if player state is playing then
+                        return "PLAYING|" & name of current track & "|" & artist of current track
+                    else
+                        return "PAUSED"
+                    end if
+                end tell
+            end if
+            return "UNKNOWN"
+            """
+            
+            var error: NSDictionary?
+            if let script = NSAppleScript(source: scriptSource) {
+                let descriptor = script.executeAndReturnError(&error)
+                if let result = descriptor.stringValue {
+                    guard let self = self else { return }
+                    Task { @MainActor in
+                        if result.hasPrefix("PLAYING|") {
+                            let parts = result.components(separatedBy: "|")
+                            if parts.count >= 3 {
+                                self.isPlaying = true
+                                self.trackTitle = parts[1]
+                                self.artistName = parts[2]
+                            }
+                        } else if result == "PAUSED" {
+                            self.isPlaying = false
+                        }
+                    }
+                }
             }
         }
     }

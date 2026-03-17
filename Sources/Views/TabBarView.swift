@@ -10,7 +10,7 @@ struct TabBarView: View {
 
     @EnvironmentObject var windowManager: WindowManager
     @EnvironmentObject var overlayController: OverlayPanelController
-    @EnvironmentObject var nowPlaying: NowPlayingService
+    // Note: nowPlaying environment object still injected but now displayed only in Notch
 
     private let leftPadding: CGFloat = 8
     private let rightPadding: CGFloat = 10
@@ -76,9 +76,7 @@ struct TabBarView: View {
     private var constrainedRightRegion: some View {
         GeometryReader { proxy in
             AdaptiveStatusRegion(
-                availableWidth: max(proxy.size.width - rightPadding, 0),
-                hasTrack: nowPlaying.hasTrack,
-                displayText: nowPlaying.displayText
+                availableWidth: max(proxy.size.width - rightPadding, 0)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.trailing, rightPadding)
@@ -88,9 +86,7 @@ struct TabBarView: View {
 
     private var unconstrainedRightRegion: some View {
         AdaptiveStatusRegion(
-            availableWidth: .greatestFiniteMagnitude,
-            hasTrack: nowPlaying.hasTrack,
-            displayText: nowPlaying.displayText
+            availableWidth: .greatestFiniteMagnitude
         )
         .padding(.trailing, rightPadding)
         .fixedSize(horizontal: true, vertical: false)
@@ -212,62 +208,13 @@ private struct ActiveWindowTitleView: View {
 
 private struct AdaptiveStatusRegion: View {
     let availableWidth: CGFloat
-    let hasTrack: Bool
-    let displayText: String
-
+    // Music info removed - now displayed in Notch
+    
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            if hasTrack, availableWidth >= 560 {
-                statusRow(nowPlayingWidth: 220)
-            }
-
-            if hasTrack, availableWidth >= 470 {
-                statusRow(nowPlayingWidth: 120)
-            }
-
-            statusRow(nowPlayingWidth: nil)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    @ViewBuilder
-    private func statusRow(nowPlayingWidth: CGFloat?) -> some View {
-        HStack(spacing: 8) {
-            if let nowPlayingWidth {
-                NowPlayingBadge(displayText: displayText, maxWidth: nowPlayingWidth)
-            }
-
-            SystemInfoView()
-                .fixedSize(horizontal: true, vertical: false)
-        }
+        SystemInfoView()
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
-// MARK: - NowPlayingBadge
 
-/// Spotify/Music now playing: ♫ Artist — Track
-struct NowPlayingBadge: View {
-    let displayText: String
-    var maxWidth: CGFloat = 220
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "music.note")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(BarTheme.badgeMusic)
-
-            Text(displayText)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(BarTheme.inactiveText)
-                .frame(maxWidth: maxWidth, alignment: .leading)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            RoundedRectangle(cornerRadius: 3)
-                .fill(BarTheme.badgeMusic.opacity(0.12))
-        )
-    }
-}

@@ -6,76 +6,136 @@ import SwiftUI
 struct SystemInfoView: View {
     @EnvironmentObject var systemMonitor: SystemMonitorService
     @ObservedObject private var settings = AppSettings.shared
+    @StateObject private var tempService = TemperatureService()
+    @StateObject private var usageService = AIUsageService()
+
+    private var activeTimezone: TimeZone {
+        if settings.previewTimezone == AppSettings.localTimezoneIdentifier || settings.previewTimezone.isEmpty {
+            return .current
+        }
+        return TimeZone(identifier: settings.previewTimezone) ?? .current
+    }
+
+    private func cityLabel(for tz: TimeZone) -> String {
+        let raw = tz.identifier.components(separatedBy: "/").last ?? tz.abbreviation() ?? "?"
+        return raw.replacingOccurrences(of: "_", with: " ")
+    }
+
+    private func formattedDateTime(for tz: TimeZone) -> String {
+        let fmt = DateFormatter()
+        fmt.timeZone = tz
+        fmt.dateFormat = "E, MMM d h:mm a"
+        return fmt.string(from: currentTime)
+    }
 
     @State private var currentTime = Date()
+    @State private var showTimezonesPopover = false
+    @State private var showTokenPopover = false
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
-    var body: some View {
-        HStack(spacing: 6) {
-            // RAM
-            InfoBadge(
-                label: "RAM",
-                value: "\(systemMonitor.ramUsage)%",
-                color: BarTheme.badgeRam
-            )
-
-            // CPU
-            InfoBadge(
-                label: "CPU",
-                value: "\(systemMonitor.cpuUsage)%",
-                color: BarTheme.badgeCpu
-            )
-
-            // GPU
-            InfoBadge(
-                label: "GPU",
-                value: "\(systemMonitor.gpuUsage)%",
-                color: BarTheme.badgeGpu
-            )
-
-            // MIC
-            InfoBadge(
-                label: "MIC",
-                value: systemMonitor.isMicActive ? "ON" : "OFF",
-                color: BarTheme.badgeMic
-            )
-
-            // VOL
-            InfoBadge(
-                label: "VOL",
-                value: "\(systemMonitor.volume)%",
-                color: BarTheme.badgeVolume
-            )
-
-            // Separator
-            Rectangle()
-                .fill(BarTheme.separator)
-                .frame(width: 1, height: 14)
-
-            // Battery (moved before date)
-            BatteryBadge(
-                level: systemMonitor.batteryLevel,
-                isCharging: systemMonitor.isCharging
-            )
-
-            // Separator
-            Rectangle()
-                .fill(BarTheme.separator)
-                .frame(width: 1, height: 14)
-
-            // Date + Time (local)
-            Text(currentTime, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(BarTheme.badgeDate)
-
-            // Extra timezones — subtle style, shown last
-            ForEach(settings.extraTimezones, id: \.self) { tzId in
-                if let tz = TimeZone(identifier: tzId) {
-                    ExtraTimezoneBadge(date: currentTime, timeZone: tz)
+    @ViewBuilder
+    private func badge(for widgetId: String) -> some View {
+        switch widgetId {
+        case "RAM":
+            InfoBadge(label: "RAM", value: "\(systemMonitor.ramUsage)%", color: BarTheme.badgeRam)
+        case "CPU":
+            InfoBadge(label: "CPU", value: "\(systemMonitor.cpuUsage)%", color: BarTheme.badgeCpu)
+        case "Temperature":
+            TemperatureBadge(service: tempService)
+        /*
+        case "AI Usage":
+            TokenUsageBadge(usageService: usageService)
+                .onTapGesture { showTokenPopover = true }
+                .popover(isPresented: $showTokenPopover) {
+                    TokenUsagePopover(usageService: usageService, showPopover: $showTokenPopover)
                 }
+        */
+        case "GPU":
+            InfoBadge(label: "GPU", value: "\(systemMonitor.gpuUsage)%", color: BarTheme.badgeGpu)
+        case "MIC":
+            InfoBadge(label: "MIC", value: systemMonitor.isMicActive ? "ON" : "OFF", color: BarTheme.badgeMic)
+        case "VOL":
+            InfoBadge(label: "VOL", value: "\(systemMonitor.volume)%", color: BarTheme.badgeVolume)
+        case "Battery":
+            BatteryBadge(level: systemMonitor.batteryLevel, isCharging: systemMonitor.isCharging)
+        default:
+            EmptyView()
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) { // Consistent spacing
+            ForEach(settings.widgetOrder, id: \.self) { widgetId in
+                if settings.widgetVisibility[widgetId] ?? true {
+                    badge(for: widgetId)
+                    if settings.separatorPositions.contains(widgetId) || widgetId == "Battery" {
+                        Separator()
+                    }
+                }
+            }
+
+            // Date + Time (active)
+            ActiveTimezoneBadge(
+                city: activeTimezone.identifier != TimeZone.current.identifier ? cityLabel(for: activeTimezone) : "Local",
+                time: formattedDateTime(for: activeTimezone)
+            )
+            .onTapGesture { showTimezonesPopover = true }
+            .popover(isPresented: $showTimezonesPopover) {
+                TimezonePopoverView(showPopover: $showTimezonesPopover)
             }
         }
         .onReceive(timer) { currentTime = $0 }
+    }
+}
+
+// MARK: - Separator
+
+struct Separator: View {
+    var body: some View {
+        Rectangle()
+            .fill(BarTheme.separator)
+            .frame(width: 1, height: 14)
+    }
+}
+
+// MARK: - TemperatureBadge
+
+struct TemperatureBadge: View {
+    @ObservedObject var service: TemperatureService
+    @ObservedObject var settings = AppSettings.shared
+    
+    private var temp: Double {
+        if settings.temperatureUnit == "F" {
+            return (service.currentTemperature * 9/5) + 32
+        }
+        return service.currentTemperature
+    }
+    
+    private var unitLabel: String {
+        settings.temperatureUnit == "F" ? "°F" : "°C"
+    }
+    
+    private var color: Color {
+        if service.currentTemperature < 60 { return .green }
+        if service.currentTemperature < 80 { return .yellow }
+        return .red
+    }
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "thermometer")
+                .font(.system(size: 10))
+            
+            Text("\(Int(temp))\(unitLabel)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(color.opacity(0.12))
+        )
+        .foregroundStyle(color)
     }
 }
 
@@ -88,7 +148,7 @@ struct InfoBadge: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Text(label)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
@@ -97,10 +157,10 @@ struct InfoBadge: View {
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundStyle(BarTheme.inactiveText)
         }
-        .padding(.horizontal, 5)
+        .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 5)
                 .fill(color.opacity(0.12))
         )
     }
@@ -130,7 +190,7 @@ struct BatteryBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: batteryIcon)
                 .font(.system(size: 11))
                 .foregroundStyle(batteryColor)
@@ -139,47 +199,107 @@ struct BatteryBadge: View {
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundStyle(BarTheme.inactiveText)
         }
-        .padding(.horizontal, 5)
+        .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 5)
                 .fill(batteryColor.opacity(0.12))
         )
     }
 }
 
-// MARK: - ExtraTimezoneBadge
+// MARK: - ActiveTimezoneBadge
 
-/// A subtle, compact timezone clock shown after the main date.
-struct ExtraTimezoneBadge: View {
-    let date: Date
-    let timeZone: TimeZone
-
-    /// Short city label from the timezone identifier (e.g. "New York" from "America/New_York").
-    private var cityLabel: String {
-        let raw = timeZone.identifier.components(separatedBy: "/").last ?? timeZone.abbreviation() ?? "?"
-        return raw.replacingOccurrences(of: "_", with: " ")
-    }
-
-    /// Format the time in the given timezone.
-    private var formattedTime: String {
-        let fmt = DateFormatter()
-        fmt.timeZone = timeZone
-        fmt.dateFormat = "h:mm a"
-        return fmt.string(from: date)
-    }
+/// Active timezone badge: `CITY time`
+struct ActiveTimezoneBadge: View {
+    let city: String
+    let time: String
 
     var body: some View {
-        HStack(spacing: 3) {
-            Text(cityLabel)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .foregroundStyle(BarTheme.inactiveText.opacity(0.5))
+        HStack(spacing: 4) {
+            Text(city)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(BarTheme.inactiveText.opacity(0.6))
 
-            Text(formattedTime)
-                .font(.system(size: 9, weight: .regular, design: .monospaced))
-                .foregroundStyle(BarTheme.badgeDate.opacity(0.45))
+            Text(time)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(BarTheme.badgeDate)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(BarTheme.badgeDate.opacity(0.12))
+        )
+    }
+}
+
+// MARK: - TimezonePopoverView
+
+struct TimezoneItemView: View {
+    let label: String
+    let id: String
+    @Binding var showPopover: Bool
+    @ObservedObject var settings = AppSettings.shared
+    
+    var isActive: Bool {
+        settings.previewTimezone == id || (settings.previewTimezone.isEmpty && id == AppSettings.localTimezoneIdentifier)
+    }
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(isActive ? .primary : .secondary)
+            Spacer()
+            if isActive {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(isActive ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.05))
+        .cornerRadius(6)
+        .contentShape(Rectangle()) // Make the whole area tappable
+        .onTapGesture {
+            settings.previewTimezone = id
+            showPopover = false
+        }
+    }
+}
+
+// MARK: - TimezonePopoverView
+
+struct TimezonePopoverView: View {
+    @ObservedObject var settings = AppSettings.shared
+    @Binding var showPopover: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Select Timezone")
+                .font(.system(size: 12, weight: .bold))
+                .padding(12)
+            
+            Divider()
+            
+            ScrollView {
+                VStack(spacing: 4) {
+                    TimezoneItemView(label: "Local", id: AppSettings.localTimezoneIdentifier, showPopover: $showPopover)
+                    
+                    ForEach(settings.extraTimezones, id: \.self) { tzId in
+                        if TimeZone(identifier: tzId) != nil {
+                            TimezoneItemView(
+                                label: tzId.components(separatedBy: "/").last?.replacingOccurrences(of: "_", with: " ") ?? tzId,
+                                id: tzId,
+                                showPopover: $showPopover
+                            )
+                        }
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .frame(width: 200, height: 250)
     }
 }
