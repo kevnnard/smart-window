@@ -175,22 +175,13 @@ class NotchOverlayWindow: NSPanel {
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: backingStoreType, defer: flag)
         
-        // CRITICAL: Window level for signed/notarized apps
-        // - .screenSaver (level 1000) is BLOCKED by macOS security for signed apps
-        // - The native menu bar is at level 24 (mainMenu)
-        // - Status bar items are at level 25 (statusBar)
-        // - We use mainMenu + 2 (level 26) to appear above the menu bar
-        //   while staying within macOS-allowed levels for signed apps
-        let mainMenuLevel = Int(CGWindowLevelForKey(.mainMenuWindow))
-        self.level = NSWindow.Level(rawValue: mainMenuLevel + 2)
-        
+        // Window level: popUpMenu (101) works in both dev and signed builds
+        self.level = .popUpMenu
         self.backgroundColor = .clear
         self.isOpaque = false
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         self.ignoresMouseEvents = false
-        
-        print("[NotchOverlayWindow] Created with level: \(self.level.rawValue) (mainMenu=\(mainMenuLevel) + 2)")
     }
     
     override var canBecomeKey: Bool {
