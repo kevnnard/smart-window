@@ -2,301 +2,527 @@ import SwiftUI
 
 // MARK: - SettingsView
 
+/// Settings window: a System Settings style sidebar with one pane per area.
 struct SettingsView: View {
-    @StateObject private var settings = AppSettings.shared
-    @State private var selectedCategory: SettingsCategory? = .general
-    @State private var timezoneSearch = ""
-
-    private var filteredTimezones: [String] {
-        let all = TimeZone.knownTimeZoneIdentifiers.sorted()
-        if timezoneSearch.isEmpty { return all }
-        let query = timezoneSearch.lowercased().replacingOccurrences(of: " ", with: "_")
-        return all.filter { $0.lowercased().contains(query) }
-    }
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var selection: SettingsPane = .general
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsCategory.allCases, selection: $selectedCategory) { category in
-                NavigationLink(value: category) {
-                    Label(category.label, systemImage: category.icon)
+            List(SettingsPane.allCases, selection: $selection) { pane in
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    PaneIcon(systemImage: pane.icon, tint: pane.tint)
                 }
+                .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 150, ideal: 150)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 200)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 2) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 44, height: 44)
+                    Text("SmartWindow")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(Self.versionString)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+            }
         } detail: {
-            switch selectedCategory {
-            case .general:
-                GeneralSettingsDetailView()
-            case .system:
-                SystemSettingsDetailView(timezoneSearch: $timezoneSearch, filteredTimezones: filteredTimezones)
-            case .layout:
-                LayoutSettingsDetailView()
-            case .ai:
-                AISettingsDetailView()
-            case nil:
-                Text("Select a category")
-            }
+            pane
+                .navigationTitle(selection.title)
         }
-        .frame(width: 600, height: 500)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(minWidth: 700, minHeight: 520)
+        .onAppear { settings.reconcileWidgets() }
+    }
+
+    @ViewBuilder
+    private var pane: some View {
+        switch selection {
+        case .general: GeneralPane()
+        case .appearance: AppearancePane()
+        case .widgets: WidgetsPane()
+        case .clock: ClockPane()
+        case .tailscale: TailscalePane()
+        }
+    }
+
+    static var versionString: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "dev"
+        let build = info?["CFBundleVersion"] as? String
+        return build.map { "Version \(short) (\($0))" } ?? "Version \(short)"
     }
 }
 
-enum SettingsCategory: String, CaseIterable, Identifiable {
-    case general, system, layout, ai
-    
+// MARK: - Panes
+
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general, appearance, widgets, clock, tailscale
+
     var id: String { rawValue }
-    
-    var label: String {
+
+    var title: String {
         switch self {
         case .general: return "General"
-        case .system: return "System"
-        case .layout: return "Layout"
-        case .ai: return "AI"
+        case .appearance: return "Appearance"
+        case .widgets: return "Widgets"
+        case .clock: return "Clock"
+        case .tailscale: return "Tailscale"
         }
     }
-    
+
     var icon: String {
         switch self {
-        case .general: return "gear"
-        case .system: return "cpu"
-        case .layout: return "rectangle.3.group"
-        case .ai: return "brain.head.profile"
+        case .general: return "gearshape.fill"
+        case .appearance: return "paintbrush.fill"
+        case .widgets: return "square.grid.3x1.below.line.grid.1x2.fill"
+        case .clock: return "clock.fill"
+        case .tailscale: return "lock.shield.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .general: return .gray
+        case .appearance: return .pink
+        case .widgets: return .blue
+        case .clock: return .orange
+        case .tailscale: return .teal
         }
     }
 }
 
-struct AISettingsDetailView: View {
+/// Rounded colored square icon, as in System Settings.
+private struct PaneIcon: View {
+    let systemImage: String
+    let tint: Color
+
     var body: some View {
-        VStack {
-            Text("AI Settings Coming Soon")
-                .font(.title)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Image(systemName: systemImage)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 22, height: 22)
+            .background(tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
-// MARK: - Subviews
+// MARK: - General
 
-struct GeneralSettingsDetailView: View {
-    @ObservedObject var settings = AppSettings.shared
-    
+private struct GeneralPane: View {
+    @ObservedObject private var settings = AppSettings.shared
+
     var body: some View {
         Form {
-            Section(header: Label("Preferences", systemImage: "gear")) {
+            Section {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
+            } header: {
+                Text("Startup")
             }
-            
-            Section(header: Label("Keyboard Shortcuts", systemImage: "keyboard")) {
-                ShortcutRow(label: "Show or hide bar", shortcut: "⌥ Esc")
-                ShortcutRow(label: "Next window", shortcut: "⌥ ]")
-                ShortcutRow(label: "Previous window", shortcut: "⌥ [")
-                ShortcutRow(label: "Jump to tab", shortcut: "⌥ 1-9")
+
+            Section {
+                ShortcutRow(label: "Show or hide the bar", keys: ["⌥", "esc"])
+                ShortcutRow(label: "Next window", keys: ["⌥", "]"])
+                ShortcutRow(label: "Previous window", keys: ["⌥", "["])
+                ShortcutRow(label: "Jump to tab 1 to 9", keys: ["⌥", "1…9"])
+            } header: {
+                Text("Keyboard shortcuts")
+            } footer: {
+                Text("Shortcuts are global and work in any app.")
             }
-            
-            Section(header: Label("About", systemImage: "info.circle")) {
-                LabeledContent("Version", value: "0.2.3")
+
+            Section {
+                LabeledContent("Version", value: SettingsView.versionString)
+                LabeledContent("Accessibility") {
+                    PermissionBadge(granted: AccessibilityService.shared.isAccessibilityEnabled)
+                }
+            } header: {
+                Text("About")
+            } footer: {
+                Text("Accessibility access is required to list and switch windows.")
             }
         }
         .formStyle(.grouped)
-    }
-}
-
-struct SystemSettingsDetailView: View {
-    @ObservedObject var settings = AppSettings.shared
-    @Binding var timezoneSearch: String
-    let filteredTimezones: [String]
-    
-    var body: some View {
-        Form {
-            Section(header: Label("Time and Units", systemImage: "clock")) {
-                Picker("Preview Timezone", selection: $settings.previewTimezone) {
-                    Text("Local").tag("")
-                    ForEach(settings.extraTimezones, id: \.self) { tz in
-                        Text(tz.replacingOccurrences(of: "_", with: " ")).tag(tz)
-                    }
-                }
-                
-                Picker("Temperature Unit", selection: $settings.temperatureUnit) {
-                    Text("Celsius").tag("C")
-                    Text("Fahrenheit").tag("F")
-                }
-                .pickerStyle(.segmented)
-            }
-            
-            Section(header: Label("Extra Timezones", systemImage: "globe")) {
-                ForEach(settings.extraTimezones, id: \.self) { tz in
-                    HStack {
-                        Text(tz.replacingOccurrences(of: "_", with: " "))
-                        Spacer()
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                settings.extraTimezones.removeAll { $0 == tz }
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("Search timezone…", text: $timezoneSearch)
-                        .textFieldStyle(.roundedBorder)
-                }
-                
-                if !timezoneSearch.isEmpty {
-                    ScrollView {
-                        ForEach(filteredTimezones.prefix(5), id: \.self) { tz in
-                            Button {
-                                if !settings.extraTimezones.contains(tz) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        settings.extraTimezones.append(tz)
-                                    }
-                                }
-                                timezoneSearch = ""
-                            } label: {
-                                Text(tz.replacingOccurrences(of: "_", with: " "))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                            Divider()
-                        }
-                    }
-                    .frame(maxHeight: 120)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-struct LayoutSettingsDetailView: View {
-    @ObservedObject var settings = AppSettings.shared
-    @State private var draggingItem: String?
-    
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(settings.widgetOrder, id: \.self) { widget in
-                    HStack(spacing: 16) {
-                        Image(systemName: "line.3.horizontal")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 14))
-                        
-                        Text(widget)
-                            .font(.system(.body, design: .rounded, weight: .medium))
-                        
-                        Spacer()
-                        
-                        // Visibility Toggle
-                        Toggle("", isOn: Binding(
-                            get: { settings.widgetVisibility[widget] ?? true },
-                            set: { settings.widgetVisibility[widget] = $0 }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(FuturisticToggleStyle(icon: "eye"))
-                        
-                        // Separator Toggle
-                        Toggle("", isOn: Binding(
-                            get: { settings.separatorPositions.contains(widget) },
-                            set: { isOn in
-                                if isOn {
-                                    if !settings.separatorPositions.contains(widget) {
-                                        settings.separatorPositions.append(widget)
-                                    }
-                                } else {
-                                    settings.separatorPositions.removeAll { $0 == widget }
-                                }
-                            }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(FuturisticToggleStyle(icon: "line.horizontal.3"))
-                        .disabled(widget == settings.widgetOrder.last)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1), lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .onDrag {
-                        if widget == "Date" { return NSItemProvider() }
-                        self.draggingItem = widget
-                        return NSItemProvider(object: widget as NSString)
-                    }
-                    .onDrop(of: [.text], delegate: WidgetDropDelegate(item: widget, items: $settings.widgetOrder, draggingItem: $draggingItem))
-                }
-            }
-            .padding(20)
-        }
-    }
-}
-
-private struct WidgetDropDelegate: DropDelegate {
-    let item: String
-    @Binding var items: [String]
-    @Binding var draggingItem: String?
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggingItem = nil
-        return true
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let draggingItem = draggingItem,
-              draggingItem != item,
-              let from = items.firstIndex(of: draggingItem),
-              let to = items.firstIndex(of: item) else { return }
-
-        if items[to] != draggingItem {
-            withAnimation {
-                items.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
-            }
-        }
-    }
-}
-
-private struct FuturisticToggleStyle: ToggleStyle {
-    let icon: String
-    
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-        } label: {
-            Image(systemName: configuration.isOn ? icon : "\(icon).slash")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(configuration.isOn ? Color.accentColor : .secondary)
-                .frame(width: 32, height: 32)
-                .background(configuration.isOn ? Color.accentColor.opacity(0.15) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
     }
 }
 
 private struct ShortcutRow: View {
     let label: String
-    let shortcut: String
-    
+    let keys: [String]
+
     var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(shortcut)
-                .font(.system(.caption, design: .monospaced))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.primary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+        LabeledContent(label) {
+            HStack(spacing: 4) {
+                ForEach(keys, id: \.self) { key in
+                    Text(key)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(Color.primary.opacity(0.12)))
+                }
+            }
         }
     }
 }
 
-extension Color {
-    func darker() -> Color {
-        return self.opacity(0.8) // Simplified
+private struct PermissionBadge: View {
+    let granted: Bool
+
+    var body: some View {
+        Label(granted ? "Granted" : "Not granted", systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(granted ? Color.green : Color.orange)
+    }
+}
+
+// MARK: - Appearance
+
+private struct AppearancePane: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Bar opacity") {
+                    HStack(spacing: 10) {
+                        Slider(value: $settings.barOpacity, in: 0.6...1.0, step: 0.02)
+                            .frame(width: 180)
+                        Text("\(Int((settings.barOpacity * 100).rounded()))%")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+            } header: {
+                Text("Bar")
+            } footer: {
+                Text("Lower opacity lets the wallpaper show through the bar.")
+            }
+
+            Section {
+                Picker("Now Playing badge", selection: $settings.notchBadgeMatchesBar) {
+                    Text("Black").tag(false)
+                    Text("Match bar color").tag(true)
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Notch")
+            } footer: {
+                Text("Black blends with the physical notch on MacBook screens.")
+            }
+
+            Section {
+                BarPreview()
+            } header: {
+                Text("Preview")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Small live preview of the bar and the notch badge with the current appearance settings.
+private struct BarPreview: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [.teal, .indigo], startPoint: .leading, endPoint: .trailing)
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    previewTab("1 · Finder", active: false)
+                    previewTab("2 · Safari", active: true)
+                    Spacer()
+                    previewBadge("CPU 12%", color: BarTheme.badgeCpu)
+                    previewBadge("RAM 48%", color: BarTheme.badgeRam)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(BarTheme.surface.opacity(settings.barOpacity))
+
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.2)).frame(width: 14, height: 14)
+                    Text("Track · Artist")
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(BarTheme.badgeMusic)
+                }
+                .padding(.horizontal, 8)
+                .frame(width: 150, height: 22)
+                .background(settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black)
+                .clipShape(BottomRoundedRectangle(radius: 7))
+            }
+        }
+        .frame(height: 80)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func previewTab(_ text: String, active: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(active ? BarTheme.activeText : BarTheme.inactiveText)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(active ? BarTheme.activeTab : BarTheme.tabBackground, in: RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func previewBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+    }
+}
+
+// MARK: - Widgets
+
+private struct WidgetsPane: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        Form {
+            Section {
+                List {
+                    ForEach(settings.widgetOrder, id: \.self) { id in
+                        WidgetRow(id: id, isLast: id == settings.widgetOrder.last)
+                    }
+                    .onMove { from, to in
+                        settings.widgetOrder.move(fromOffsets: from, toOffset: to)
+                    }
+                }
+                .frame(height: CGFloat(settings.widgetOrder.count) * 30 + 12)
+                .scrollDisabled(true)
+            } header: {
+                Text("Bar widgets")
+            } footer: {
+                Text("Drag to reorder. The clock always stays at the far right. Keyboard input uses your enabled macOS keyboard sources, not the app language.")
+            }
+
+            Section {
+                Picker("Temperature unit", selection: $settings.temperatureUnit) {
+                    Text("Celsius").tag("C")
+                    Text("Fahrenheit").tag("F")
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Units")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct WidgetRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+    let id: String
+    let isLast: Bool
+
+    private var isVisible: Binding<Bool> {
+        Binding(
+            get: { settings.widgetVisibility[id] ?? true },
+            set: { settings.widgetVisibility[id] = $0 }
+        )
+    }
+
+    private var hasSeparator: Binding<Bool> {
+        Binding(
+            get: { settings.separatorPositions.contains(id) },
+            set: { on in
+                if on {
+                    if !settings.separatorPositions.contains(id) { settings.separatorPositions.append(id) }
+                } else {
+                    settings.separatorPositions.removeAll { $0 == id }
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+            Text(AppSettings.widgetDisplayName(id))
+                .foregroundStyle(isVisible.wrappedValue ? .primary : .secondary)
+            Spacer()
+            Toggle("Separator after", isOn: hasSeparator)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .disabled(isLast)
+                .help(isLast ? "The last widget always has a separator" : "Draw a divider after this widget")
+            Toggle("Visible", isOn: isVisible)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Tailscale
+
+private struct TailscalePane: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var service = TailscaleService.shared
+
+    private var status: String {
+        switch service.state {
+        case .notInstalled: return "Not installed"
+        case .unavailable: return "Status unavailable"
+        case .stopped: return "Off or awaiting authorization"
+        case .connecting: return "Connecting"
+        case .connected: return "Connected to your tailnet"
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Tailscale", value: status)
+                if service.isConnected {
+                    if !service.tailnetName.isEmpty {
+                        LabeledContent("Tailnet", value: service.tailnetName)
+                    }
+                    if !service.tailscaleIP.isEmpty {
+                        LabeledContent("Tailscale IP", value: service.tailscaleIP)
+                    }
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        LabeledContent("Observed online", value: service.connectedDuration(now: context.date) ?? "--")
+                    }
+                }
+                if service.state == .notInstalled {
+                    Link("Get Tailscale…", destination: TailscaleService.downloadURL)
+                } else {
+                    Button("Open Tailscale") {
+                        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.tailscale.ipn.macsys")
+                            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.tailscale.ipn.macos") {
+                            NSWorkspace.shared.open(url)
+                        } else {
+                            NSWorkspace.shared.open(TailscaleService.downloadURL)
+                        }
+                    }
+                }
+            } header: {
+                Text("Private network")
+            } footer: {
+                Text("Tailscale creates encrypted connections between your devices. A connected tailnet does not mean all internet traffic uses a VPN; that requires a configured exit node. SmartWindow never changes your VPN settings.")
+            }
+
+            Section {
+                Toggle("Show Tailscale widget", isOn: Binding(
+                    get: { settings.widgetVisibility["Tailscale"] ?? false },
+                    set: { settings.widgetVisibility["Tailscale"] = $0 }
+                ))
+            } header: {
+                Text("Menu bar")
+            } footer: {
+                Text("Hidden when Tailscale is not installed. The timer measures how long SmartWindow has continuously observed Tailscale online, not the actual tunnel connection age. It resets after disconnection, unavailable status, sleep, or restarting SmartWindow. Changes between five-second checks may be missed.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Clock
+
+private struct ClockPane: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var search = ""
+
+    private var matches: [String] {
+        guard !search.isEmpty else { return [] }
+        let query = search.lowercased().replacingOccurrences(of: " ", with: "_")
+        return TimeZone.knownTimeZoneIdentifiers
+            .filter { $0.lowercased().contains(query) && !settings.extraTimezones.contains($0) }
+            .sorted()
+            .prefix(8)
+            .map { $0 }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Shown in the bar", selection: $settings.previewTimezone) {
+                    Text("Local time").tag("")
+                    ForEach(settings.extraTimezones, id: \.self) { tz in
+                        Text(Self.cityName(tz)).tag(tz)
+                    }
+                }
+            } header: {
+                Text("Clock")
+            } footer: {
+                Text("Click the clock in the bar to switch between these timezones.")
+            }
+
+            Section {
+                if settings.extraTimezones.isEmpty {
+                    Text("No extra timezones yet.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(settings.extraTimezones, id: \.self) { tz in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(Self.cityName(tz))
+                            Text(tz)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(Self.currentTime(in: tz))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Button(role: .destructive) {
+                            settings.extraTimezones.removeAll { $0 == tz }
+                            if settings.previewTimezone == tz { settings.previewTimezone = "" }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.red)
+                    }
+                }
+
+                TextField("Add a city or region, e.g. Madrid", text: $search)
+                    .textFieldStyle(.roundedBorder)
+                ForEach(matches, id: \.self) { tz in
+                    Button {
+                        settings.extraTimezones.append(tz)
+                        search = ""
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle")
+                            Text(Self.cityName(tz))
+                            Spacer()
+                            Text(tz).font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("Extra timezones")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    static func cityName(_ identifier: String) -> String {
+        (identifier.components(separatedBy: "/").last ?? identifier).replacingOccurrences(of: "_", with: " ")
+    }
+
+    static func currentTime(in identifier: String) -> String {
+        guard let tz = TimeZone(identifier: identifier) else { return "" }
+        let fmt = DateFormatter()
+        fmt.timeZone = tz
+        fmt.dateFormat = "h:mm a"
+        return fmt.string(from: Date())
     }
 }

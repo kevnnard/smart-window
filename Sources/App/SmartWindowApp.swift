@@ -79,6 +79,11 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
         }
         hotKeyService.registerHotKeys()
 
+        // `SmartWindow --settings` opens the settings window on launch (development convenience).
+        if CommandLine.arguments.contains("--settings") {
+            showSettingsWindow(nil)
+        }
+
         // Listen for screen changes to reposition bar
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -108,12 +113,12 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
         let hostingController = NSHostingController(rootView: rootView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "SmartWindow Settings"
-        window.setContentSize(NSSize(width: 460, height: 520))
-        window.minSize = NSSize(width: 460, height: 520)
-        window.styleMask = [.titled, .closable, .miniaturizable]
-        window.titleVisibility = .hidden
+        window.title = "Settings"
+        window.setContentSize(NSSize(width: 720, height: 540))
+        window.minSize = NSSize(width: 700, height: 520)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.center()
         window.isReleasedWhenClosed = false
 
