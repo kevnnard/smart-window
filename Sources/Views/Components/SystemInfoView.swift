@@ -8,6 +8,7 @@ struct SystemInfoView: View {
     @EnvironmentObject var systemMonitor: SystemMonitorService
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var tempService = TemperatureService()
+    @ObservedObject private var tailscale = TailscaleService.shared
     @StateObject private var usageService = AIUsageService()
 
     private var activeTimezone: TimeZone {
@@ -61,6 +62,10 @@ struct SystemInfoView: View {
                 isMuted: systemMonitor.isMuted,
                 deviceName: systemMonitor.outputDeviceName
             )
+        case "Tailscale":
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                TailscaleBadge(service: tailscale, now: context.date)
+            }
         case "Battery":
             BatteryBadge(level: systemMonitor.batteryLevel, isCharging: systemMonitor.isCharging)
         default:
@@ -203,6 +208,68 @@ struct InfoBadge: View {
             RoundedRectangle(cornerRadius: 5)
                 .fill(color.opacity(0.12))
         )
+    }
+}
+
+// MARK: - TailscaleBadge
+
+/// VPN state and time connected. Hidden entirely when Tailscale is not installed.
+struct TailscaleBadge: View {
+    @ObservedObject var service: TailscaleService
+    let now: Date
+
+    private var valueText: String {
+        switch service.state {
+        case .notInstalled: return ""
+        case .unavailable: return "--"
+        case .stopped: return "OFF"
+        case .connecting: return "…"
+        case .connected: return service.connectedDuration(now: now) ?? "ON"
+        }
+    }
+
+    private var color: Color {
+        service.isConnected ? BarTheme.badgeVpn : BarTheme.dimText
+    }
+
+    private var tooltip: String {
+        switch service.state {
+        case .notInstalled: return "Tailscale is not installed"
+        case .unavailable: return "Tailscale status is unavailable"
+        case .stopped: return "Tailscale is off or awaiting authorization (\(service.backendState))"
+        case .connecting: return "Tailscale is connecting"
+        case .connected:
+            var parts: [String] = []
+            if !service.tailnetName.isEmpty { parts.append(service.tailnetName) }
+            if !service.tailscaleIP.isEmpty { parts.append(service.tailscaleIP) }
+            if let since = service.connectedSince {
+                let fmt = DateFormatter()
+                fmt.dateStyle = .none
+                fmt.timeStyle = .short
+                parts.append("Observed online since \(fmt.string(from: since)). Not the actual tunnel connection time.")
+            }
+            return parts.joined(separator: " · ")
+        }
+    }
+
+    var body: some View {
+        if service.isInstalled {
+            HStack(spacing: 4) {
+                Image(systemName: service.isConnected ? "lock.shield.fill" : "lock.shield")
+                    .font(.system(size: 10))
+                    .foregroundStyle(color)
+                Text(valueText)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(BarTheme.inactiveText)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(color.opacity(0.12))
+            )
+            .help(tooltip)
+        }
     }
 }
 
