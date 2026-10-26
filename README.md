@@ -99,6 +99,8 @@ without a notch.
 - **Playing or paused:** animated activity while playing, a pause indicator when paused.
 - **Persistent presence:** the badge stays while a supported player is open and disappears when it quits.
 - **Click to return:** click the artwork, title, or artist to bring the player forward.
+- **Playback controls:** click the waveform / pause indicator for previous, play/pause,
+  and next. Controls target the running supported player; failures are shown in the popover.
 - **Readable by design:** long text scrolls only when needed; the badge is black by default.
 
 Automation permission is required. Browser media such as YouTube in Chrome or

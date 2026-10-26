@@ -118,6 +118,7 @@ struct NotchView: View {
     @ObservedObject var nowPlaying: NowPlayingService
     @ObservedObject private var settings = AppSettings.shared
     let layout: NotchLayout
+    @State private var showControls = false
 
     private var isVisible: Bool { nowPlaying.hasPlayer }
 
@@ -209,6 +210,45 @@ struct NotchView: View {
     }
 
     private var playbackIndicator: some View {
+        Button { showControls.toggle() } label: {
+            indicator
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Playback controls")
+        .accessibilityLabel("Playback controls")
+        .popover(isPresented: $showControls, arrowEdge: .bottom) {
+            VStack(spacing: 14) {
+                VStack(spacing: 3) {
+                    Text(nowPlaying.trackTitle.isEmpty ? "Nothing playing" : nowPlaying.trackTitle)
+                        .font(.headline).lineLimit(2)
+                    Text(nowPlaying.artistName).font(.caption).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 24) {
+                    transportButton("Previous track", icon: "backward.end.fill", action: .previous)
+                    transportButton(nowPlaying.isPlaying ? "Pause" : "Play", icon: nowPlaying.isPlaying ? "pause.fill" : "play.fill", action: .playPause)
+                    transportButton("Next track", icon: "forward.end.fill", action: .next)
+                }
+                .disabled(!nowPlaying.hasPlayer)
+                if let error = nowPlaying.lastCommandError {
+                    Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(18).frame(width: 260)
+        }
+    }
+
+    private func transportButton(_ title: String, icon: String, action: NowPlayingService.TransportAction) -> some View {
+        Button { nowPlaying.perform(action) } label: {
+            Image(systemName: icon).font(.title3).frame(width: 30, height: 28)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    private var indicator: some View {
         HStack(spacing: 8) {
             Spacer(minLength: 0)
             if nowPlaying.isPlaying {

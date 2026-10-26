@@ -65,6 +65,50 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
+    // MARK: - Playback controls
+
+    enum TransportAction: String { case previous = "previous track", playPause = "playpause", next = "next track" }
+    @Published private(set) var lastCommandError: String?
+
+    func perform(_ action: TransportAction) {
+        lastCommandError = nil
+        do {
+            try Self.send(action, bundleIdentifier: playerBundleIdentifier,
+                          runningIDs: Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)),
+                          execute: { source in
+                guard let script = NSAppleScript(source: source) else { throw TransportError.failed }
+                var error: NSDictionary?
+                script.executeAndReturnError(&error)
+                if let error { throw NSError(domain: "SmartWindow.Player", code: 1, userInfo: [NSLocalizedDescriptionKey: error[NSAppleScript.errorMessage] as? String ?? "Player command failed. Check Automation permission."]) }
+            }, refresh: poll)
+        } catch {
+            lastCommandError = error.localizedDescription
+        }
+    }
+
+    enum TransportError: LocalizedError {
+        case unavailable, failed
+        var errorDescription: String? {
+            switch self {
+            case .unavailable: return "The supported player is no longer running."
+            case .failed: return "Could not control the player. Check Automation permission."
+            }
+        }
+    }
+
+    static func send(_ action: TransportAction, bundleIdentifier: String?, runningIDs: Set<String>,
+                     execute: (String) throws -> Void, refresh: () -> Void) throws {
+        guard let id = bundleIdentifier, players.contains(where: { $0.bundleIdentifier == id }),
+              runningIDs.contains(id) else { throw TransportError.unavailable }
+        // The ID and command are allowlisted; no track text or external input enters the script.
+        let source = """
+        if application id "\(id)" is not running then error "Player is no longer running."
+        tell application id "\(id)" to \(action.rawValue)
+        """
+        try execute(source)
+        refresh()
+    }
+
     // MARK: - Players
 
     struct Player {
