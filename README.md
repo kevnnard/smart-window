@@ -139,7 +139,8 @@ A resizable window with a System Settings-style sidebar keeps controls grouped b
 |:---|:---|
 | **General** | Shortcut reference, app version, and Accessibility permission status |
 | **Appearance** | Bar opacity from 60–100%, black or bar-colored Now Playing badge, and a live preview |
-| **Widgets** | Visibility, drag-to-reorder, separators, and temperature unit |
+| **Widgets** | Global visibility, drag-to-reorder, separators, and temperature unit |
+| **Displays** | Per-monitor widget and Now Playing visibility: Default, Show, or Hide |
 | **Clock** | Displayed timezone and searchable extra timezones |
 | **Tailscale** | Installation / connection status, tailnet details, and the widget toggle |
 
@@ -151,6 +152,13 @@ badge defaults to **black**. Appearance and widget preferences persist between l
 shows that state and offers a link. Registration errors do not turn into a fake
 successful toggle. This control is unavailable in an unbundled debug executable.
 An old saved startup preference does not automatically register the app.
+
+In **Displays**, choose a connected monitor and override each widget or Now Playing.
+**Default** follows global settings; **Show** and **Hide** take precedence on that
+monitor. Overrides use the display's CoreGraphics UUID and are retained across
+reconnection. Widget order, clock settings and separators remain global.
+"Use Defaults for This Display" resets only that monitor's overrides. Disabling
+"Show Now Playing by default" still allows explicit Show on a chosen monitor.
 
 ## Keyboard input
 

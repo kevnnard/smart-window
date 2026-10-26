@@ -48,6 +48,7 @@ struct SettingsView: View {
         case .general: GeneralPane()
         case .appearance: AppearancePane()
         case .widgets: WidgetsPane()
+        case .displays: DisplaysPane()
         case .clock: ClockPane()
         case .tailscale: TailscalePane()
         }
@@ -64,7 +65,7 @@ struct SettingsView: View {
 // MARK: - Panes
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, widgets, clock, tailscale
+    case general, appearance, widgets, displays, clock, tailscale
 
     var id: String { rawValue }
 
@@ -73,6 +74,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .widgets: return "Widgets"
+        case .displays: return "Displays"
         case .clock: return "Clock"
         case .tailscale: return "Tailscale"
         }
@@ -83,6 +85,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "gearshape.fill"
         case .appearance: return "paintbrush.fill"
         case .widgets: return "square.grid.3x1.below.line.grid.1x2.fill"
+        case .displays: return "display.2"
         case .clock: return "clock.fill"
         case .tailscale: return "lock.shield.fill"
         }
@@ -93,6 +96,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return .gray
         case .appearance: return .pink
         case .widgets: return .blue
+        case .displays: return .purple
         case .clock: return .orange
         case .tailscale: return .teal
         }

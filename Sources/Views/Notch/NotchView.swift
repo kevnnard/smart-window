@@ -118,9 +118,13 @@ struct NotchView: View {
     @ObservedObject var nowPlaying: NowPlayingService
     @ObservedObject private var settings = AppSettings.shared
     let layout: NotchLayout
+    var displayKey: String? = nil
+    @ObservedObject private var displayPreferences = DisplayPreferences.shared
     @State private var showControls = false
 
-    private var isVisible: Bool { nowPlaying.hasPlayer }
+    private var isVisible: Bool {
+        nowPlaying.hasPlayer && displayPreferences.nowPlayingVisible(on: displayKey)
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -140,6 +144,7 @@ struct NotchView: View {
         .frame(width: layout.panelSize.width, height: layout.panelSize.height, alignment: .top)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isVisible)
         .animation(.easeInOut(duration: 0.2), value: nowPlaying.isPlaying)
+        .onChange(of: isVisible) { visible in if !visible { showControls = false } }
     }
 
     @ViewBuilder

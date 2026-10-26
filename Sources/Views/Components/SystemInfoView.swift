@@ -5,6 +5,8 @@ import Combine
 
 /// Right side of the bar: RAM, CPU, GPU, MIC, VOL, Battery, Date, extra timezones — polybar style.
 struct SystemInfoView: View {
+    var displayKey: String? = nil
+    @ObservedObject private var displayPreferences = DisplayPreferences.shared
     @EnvironmentObject var systemMonitor: SystemMonitorService
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var tempService = TemperatureService()
@@ -78,7 +80,7 @@ struct SystemInfoView: View {
     var body: some View {
         HStack(spacing: 8) { // Consistent spacing
             ForEach(settings.widgetOrder, id: \.self) { widgetId in
-                if settings.widgetVisibility[widgetId] ?? true {
+                if displayPreferences.widgetVisible(widgetId, on: displayKey, global: settings.widgetVisibility[widgetId] ?? true) {
                     badge(for: widgetId)
                     if settings.separatorPositions.contains(widgetId) || widgetId == "Battery" {
                         Separator()

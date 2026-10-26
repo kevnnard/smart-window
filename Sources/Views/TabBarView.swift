@@ -77,7 +77,8 @@ struct TabBarView: View {
     private var constrainedRightRegion: some View {
         GeometryReader { proxy in
             AdaptiveStatusRegion(
-                availableWidth: max(proxy.size.width - rightPadding, 0)
+                availableWidth: max(proxy.size.width - rightPadding, 0),
+                displayKey: screen.flatMap { DisplayIdentity.key(for: $0) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.trailing, rightPadding)
@@ -87,7 +88,8 @@ struct TabBarView: View {
 
     private var unconstrainedRightRegion: some View {
         AdaptiveStatusRegion(
-            availableWidth: .greatestFiniteMagnitude
+            availableWidth: .greatestFiniteMagnitude,
+            displayKey: screen.flatMap { DisplayIdentity.key(for: $0) }
         )
         .padding(.trailing, rightPadding)
         .fixedSize(horizontal: true, vertical: false)
@@ -231,10 +233,11 @@ private struct ActiveWindowTitleView: View {
 
 private struct AdaptiveStatusRegion: View {
     let availableWidth: CGFloat
+    let displayKey: String?
     // Music info removed - now displayed in Notch
     
     var body: some View {
-        SystemInfoView()
+        SystemInfoView(displayKey: displayKey)
             .fixedSize(horizontal: true, vertical: false)
             .frame(maxWidth: .infinity, alignment: .trailing)
     }

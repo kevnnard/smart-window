@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import Combine
 
 @MainActor
 final class NotchController: NSObject, ObservableObject {
@@ -8,12 +9,18 @@ final class NotchController: NSObject, ObservableObject {
     
     /// Shared NowPlayingService so all notch windows show the same info
     private let nowPlayingService = NowPlayingService()
+    private var isVisible = false
+    private var preferencesSubscription: AnyCancellable?
     
     override init() {
         super.init()
+        preferencesSubscription = DisplayPreferences.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshVisibility() }
     }
     
     func show() {
+        isVisible = true
         // Safety check: ensure screens are available
         guard !NSScreen.screens.isEmpty else {
             print("[NotchController] No screens available, skipping panel creation")
@@ -25,12 +32,23 @@ final class NotchController: NSObject, ObservableObject {
         }
         
         print("[NotchController] Showing \(panels.count) notch panel(s)")
-        for panel in panels.values {
-            panel.orderFront(nil)
+        refreshVisibility()
+    }
+
+    private func refreshVisibility() {
+        for screen in NSScreen.screens {
+            guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+                  let panel = panels[id] else { continue }
+            if isVisible && DisplayPreferences.shared.nowPlayingVisible(on: DisplayIdentity.key(for: screen)) {
+                panel.orderFront(nil)
+            } else {
+                panel.orderOut(nil)
+            }
         }
     }
     
     func hide() {
+        isVisible = false
         for panel in panels.values {
             panel.orderOut(nil)
         }
@@ -108,7 +126,6 @@ final class NotchController: NSObject, ObservableObject {
             if panels[displayID] == nil {
                 let panel = makePanel(for: screen)
                 panels[displayID] = panel
-                panel.orderFront(nil)
             }
             
             // Reposition existing or new panel
@@ -116,6 +133,7 @@ final class NotchController: NSObject, ObservableObject {
                 positionPanel(panel, on: screen)
             }
         }
+        refreshVisibility()
     }
     
     /// Repositions all panels on their respective screens
@@ -139,7 +157,7 @@ final class NotchController: NSObject, ObservableObject {
             defer: false
         )
         panel.contentView = NSHostingView(
-            rootView: NotchView(nowPlaying: nowPlayingService, layout: layout)
+            rootView: NotchView(nowPlaying: nowPlayingService, layout: layout, displayKey: DisplayIdentity.key(for: screen))
         )
         return panel
     }
