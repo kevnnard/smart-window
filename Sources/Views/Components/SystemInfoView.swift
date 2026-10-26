@@ -66,6 +66,8 @@ struct SystemInfoView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 TailscaleBadge(service: tailscale, now: context.date)
             }
+        case "Keyboard":
+            KeyboardInputBadge()
         case "Battery":
             BatteryBadge(level: systemMonitor.batteryLevel, isCharging: systemMonitor.isCharging)
         default:
