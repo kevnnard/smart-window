@@ -1,35 +1,75 @@
-SmartWindow Public Non-Commercial License v1.0
+SmartWindow Public Non-Commercial License v1.1
 
 Copyright (c) 2026 Kevnnard
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to use,
-copy, modify, publish, and distribute the Software, subject to the following
-conditions:
+1. Scope
 
-1. The Software may be used for personal, educational, research, hobby, or
-   other non-commercial purposes.
+"Software" means SmartWindow and the associated source code, binaries, and
+documentation provided under this license. Third-party components remain
+subject to their own licenses; this license does not replace those terms.
 
-2. Redistributions of the Software or substantial portions of the Software
-   must include this license text and copyright notice.
+2. Non-commercial permission
 
-3. You may modify the Software and distribute modified versions only for
-   non-commercial purposes.
+Subject to the conditions below, you may use, copy, study, compile, modify,
+and redistribute the Software, including modified versions, solely for
+personal, educational, research, hobby, or other non-commercial purposes.
 
-4. Commercial use is prohibited without prior written permission from the
-   copyright holder.
+Free redistribution is permitted. This is not a personal-use-only or
+non-transferable license: you may share copies as long as the distribution
+is non-commercial and complies with this license.
 
-5. For the purposes of this license, "commercial use" includes, without
-   limitation:
-   - selling the Software
-   - sublicensing the Software for a fee
-   - including the Software in a paid product or paid service
-   - offering hosted access to the Software for a fee
-   - using the Software in a way primarily intended for commercial advantage
-     or monetary compensation
+3. Conditions for sharing copies and modifications
 
-6. This license does not grant any trademark rights, branding rights, or the
-   right to imply endorsement by the author.
+You must:
+
+- provide the Software and modified versions without charging recipients;
+- include this entire license and the applicable copyright notices with
+  every copy or substantial portion of the Software;
+- keep redistributions and modified versions under these same terms; and
+- identify modified versions as modified, without implying that they are
+  official releases or endorsed by the copyright holder.
+
+Sharing a copy does not transfer ownership of the Software or grant the
+recipient permission to sell or commercially exploit it.
+
+4. No commercial exploitation without written permission
+
+You may not sell, resell, license for a fee, or otherwise commercially
+exploit the Software or modified versions without prior written permission
+from the copyright holder.
+
+Prohibited commercial use includes, without limitation:
+
+- charging for copies, downloads, installation bundles, licenses,
+  subscriptions, or access to the Software;
+- including the Software in a paid product, paid service, or commercial
+  distribution, even if the Software is described as a free extra;
+- offering hosted access to the Software for a fee;
+- monetizing distribution of or access to the Software through advertising
+  or other revenue-generating arrangements; and
+- using the Software primarily for commercial advantage or monetary
+  compensation.
+
+Making the source code available or modifying the Software does not remove
+these restrictions. Commercial use requires a separate written permission
+or commercial license from the copyright holder.
+
+5. Rights reserved by the copyright holder
+
+The permissions in this license do not transfer copyright ownership.
+The copyright holder retains the right to sell the Software, commercially
+license it, or offer it under other terms. Restrictions on recipients do
+not restrict the copyright holder's exercise of their own rights.
+
+This clause does not grant ownership of third-party contributions or
+components; their applicable rights and licenses must still be respected.
+
+6. Names and branding
+
+This license does not grant trademark rights, branding rights, or the right
+to imply endorsement by the author or copyright holder.
+
+7. No warranty; limitation of liability
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
