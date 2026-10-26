@@ -9,7 +9,7 @@
 A native SwiftUI menu bar overlay inspired by Polybar and Waybar.<br/>
 Switch windows by number, keep your music in sight, and make the bar yours.
 
-[![Release](https://img.shields.io/badge/release-v0.2.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.2.0)
+[![Release](https://img.shields.io/badge/release-v0.3.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.3.0)
 [![macOS](https://img.shields.io/badge/macOS-13%2B-black?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 [![Homebrew](https://img.shields.io/badge/Homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew&logoColor=black)](#quick-start)
 [![License](https://img.shields.io/badge/license-non--commercial-blue?style=for-the-badge)](LICENSE)
@@ -26,11 +26,10 @@ Switch windows by number, keep your music in sight, and make the bar yours.
   <img width="1509" height="27" alt="Close-up of the SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
 </p>
 
-> **Release vs. development:** the published release linked here is **v0.2.0**.
-> The features below describe the current source, including unreleased improvements
-> to Now Playing, hardware readings, Settings, and Tailscale. Build from source to
-> try those changes; do not assume the Homebrew release includes them yet.
-> The screenshots above are existing project images, not a preview of every new setting.
+> **v0.3.0:** the release includes the features below in a signed, notarized
+> **Apple Silicon (arm64)** bundle. See the [release notes](Resources/ReleaseNotes-0.3.0.md)
+> for changes and known validation limits. Intel users must build from source.
+> The screenshots above are existing project images, not a preview of every setting.
 
 ---
 
@@ -406,7 +405,7 @@ The same signing identity variable also applies to `scripts/install-app.sh`.
 - Verify physical-notch layout on an open MacBook display.
 - Improve overflow behavior with many window tabs.
 - Expand hardware and macOS compatibility checks.
-- Publish the current development improvements in a follow-up release.
+- Validate physical-notch hardware, monitor reconnection and installed login-item flows.
 
 ## License
 
