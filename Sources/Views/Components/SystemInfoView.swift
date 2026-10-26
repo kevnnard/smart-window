@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - SystemInfoView
 
@@ -55,7 +56,11 @@ struct SystemInfoView: View {
         case "MIC":
             InfoBadge(label: "MIC", value: systemMonitor.isMicActive ? "ON" : "OFF", color: BarTheme.badgeMic)
         case "VOL":
-            InfoBadge(label: "VOL", value: "\(systemMonitor.volume)%", color: BarTheme.badgeVolume)
+            VolumeBadge(
+                volume: systemMonitor.volume,
+                isMuted: systemMonitor.isMuted,
+                deviceName: systemMonitor.outputDeviceName
+            )
         case "Battery":
             BatteryBadge(level: systemMonitor.batteryLevel, isCharging: systemMonitor.isCharging)
         default:
@@ -104,31 +109,66 @@ struct TemperatureBadge: View {
     @ObservedObject var service: TemperatureService
     @ObservedObject var settings = AppSettings.shared
     
-    private var temp: Double {
-        if settings.temperatureUnit == "F" {
-            return (service.currentTemperature * 9/5) + 32
-        }
-        return service.currentTemperature
-    }
-    
     private var unitLabel: String {
         settings.temperatureUnit == "F" ? "°F" : "°C"
     }
-    
+
+    /// Formatted sensor value, or "--" when no real sensor is readable.
+    private var valueText: String {
+        guard let celsius = service.cpuTemperature else { return "--" }
+        let shown = settings.temperatureUnit == "F" ? (celsius * 9 / 5) + 32 : celsius
+        return "\(Int(shown.rounded()))\(unitLabel)"
+    }
+
+    /// OS thermal pressure wins over the raw sensor: macOS is already throttling.
     private var color: Color {
-        if service.currentTemperature < 60 { return .green }
-        if service.currentTemperature < 80 { return .yellow }
+        switch service.thermalState {
+        case .critical, .serious: return .red
+        case .fair: return .yellow
+        case .nominal: break
+        @unknown default: break
+        }
+        guard let celsius = service.cpuTemperature else { return BarTheme.inactiveText }
+        if celsius < 60 { return .green }
+        if celsius < 80 { return .yellow }
         return .red
+    }
+
+    private var icon: String {
+        switch service.thermalState {
+        case .critical, .serious: return "flame.fill"
+        default: return "thermometer"
+        }
+    }
+
+    private var tooltip: String {
+        let stateLabel: String
+        switch service.thermalState {
+        case .nominal: stateLabel = "Nominal"
+        case .fair: stateLabel = "Fair"
+        case .serious: stateLabel = "Serious (throttling)"
+        case .critical: stateLabel = "Critical"
+        @unknown default: stateLabel = "Unknown"
+        }
+        var parts = ["Thermal pressure: \(stateLabel)"]
+        if let gpu = service.gpuTemperature {
+            parts.append(String(format: "GPU: %.0f°C", gpu))
+        }
+        if !service.isAvailable {
+            parts.append("No readable die sensor on this Mac")
+        }
+        return parts.joined(separator: " · ")
     }
     
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "thermometer")
+            Image(systemName: icon)
                 .font(.system(size: 10))
             
-            Text("\(Int(temp))\(unitLabel)")
+            Text(valueText)
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
         }
+        .help(tooltip)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(
@@ -163,6 +203,35 @@ struct InfoBadge: View {
             RoundedRectangle(cornerRadius: 5)
                 .fill(color.opacity(0.12))
         )
+    }
+}
+
+// MARK: - VolumeBadge
+
+/// Output volume of the current default device. Shows `MUTE` when muted and
+/// `--` when the device exposes no software volume control (typical for HDMI/DisplayPort monitors).
+struct VolumeBadge: View {
+    let volume: Int?
+    let isMuted: Bool
+    let deviceName: String
+
+    private var valueText: String {
+        if isMuted { return "MUTE" }
+        guard let volume else { return "--" }
+        return "\(volume)%"
+    }
+
+    private var tooltip: String {
+        let device = deviceName.isEmpty ? "No output device" : deviceName
+        if volume == nil && !deviceName.isEmpty {
+            return "\(device) · no software volume control"
+        }
+        return device
+    }
+
+    var body: some View {
+        InfoBadge(label: "VOL", value: valueText, color: BarTheme.badgeVolume)
+            .help(tooltip)
     }
 }
 

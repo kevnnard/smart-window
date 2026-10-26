@@ -54,9 +54,14 @@ final class AccessibilityService {
             return []
         }
 
-        return windowList.compactMap { windowElement in
+        let infos = windowList.compactMap { windowElement in
             createWindowInfo(from: windowElement, app: app)
         }
+
+        // Keep pseudo-windows (e.g. Finder's desktop) only when the app has no real
+        // window, so the app still gets a tab without being listed twice.
+        let real = infos.filter { $0.axElement.map(isRealWindow) ?? false }
+        return real.isEmpty ? infos : real
     }
 
     /// Creates a `WindowInfo` from an AXUIElement window.
@@ -95,6 +100,16 @@ final class AccessibilityService {
             app.activate()
         }
 
+        // Finder with no open windows exposes only the desktop (an AXScrollArea, not an
+        // AXWindow). Raising it does nothing visible, so open a Finder window on the
+        // Desktop folder instead.
+        if !isRealWindow(axElement) {
+            if window.appBundleIdentifier == Self.finderBundleIdentifier {
+                openFinderDesktopWindow()
+            }
+            return
+        }
+
         // Raise the specific window
         AXUIElementPerformAction(axElement, kAXRaiseAction as CFString)
         AXUIElementSetAttributeValue(axElement, kAXFocusedAttribute as CFString, true as CFTypeRef)
@@ -103,6 +118,18 @@ final class AccessibilityService {
         if window.isMinimized {
             AXUIElementSetAttributeValue(axElement, kAXMinimizedAttribute as CFString, false as CFTypeRef)
         }
+    }
+
+    static let finderBundleIdentifier = "com.apple.finder"
+
+    /// True when the element is an actual window, not a pseudo-window like Finder's desktop.
+    func isRealWindow(_ element: AXUIElement) -> Bool {
+        getStringAttribute(element, attribute: kAXRoleAttribute) == kAXWindowRole
+    }
+
+    private func openFinderDesktopWindow() {
+        guard let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first else { return }
+        NSWorkspace.shared.open(desktop)
     }
 
     /// Minimizes a window.
