@@ -116,14 +116,27 @@ private struct PaneIcon: View {
 // MARK: - General
 
 private struct GeneralPane: View {
-    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var login = LoginItemService.shared
 
     var body: some View {
         Form {
             Section {
-                Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                Toggle("Launch at login", isOn: Binding(get: { login.isEnabled }, set: login.setEnabled))
+                    .disabled(login.status == .unavailable)
+                if login.status == .requiresApproval {
+                    Label("Approval required in macOS", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    Button("Open Login Items Settings…", action: login.openLoginSettings)
+                }
+                if let message = login.errorMessage {
+                    Text(message).foregroundStyle(.red)
+                }
             } header: {
                 Text("Startup")
+            } footer: {
+                Text(login.status == .unavailable
+                     ? "Launch at login is available in the installed app bundle, not the development executable."
+                     : "Managed by macOS Login Items. Changes outside SmartWindow are reflected here.")
             }
 
             Section {
@@ -149,6 +162,8 @@ private struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { login.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login.refresh() }
     }
 }
 

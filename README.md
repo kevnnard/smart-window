@@ -140,8 +140,11 @@ A resizable window with a System Settings-style sidebar keeps controls grouped b
 The bar defaults to a neutral dark surface at **94% opacity**; the Now Playing
 badge defaults to **black**. Appearance and widget preferences persist between launches.
 
-> **Launch at login:** the General pane currently saves this preference, but automatic
-> login-item registration is not implemented yet. Do not rely on the toggle to start the app.
+**Launch at login** registers the installed app with macOS Login Items using
+`SMAppService`. macOS may require approval in System Settings; the General pane
+shows that state and offers a link. Registration errors do not turn into a fake
+successful toggle. This control is unavailable in an unbundled debug executable.
+An old saved startup preference does not automatically register the app.
 
 ## Keyboard input
 
@@ -348,7 +351,6 @@ The same signing identity variable also applies to `scripts/install-app.sh`.
 
 - Verify physical-notch layout on an open MacBook display.
 - Improve overflow behavior with many window tabs.
-- Implement real login-item registration for the startup toggle.
 - Expand hardware and macOS compatibility checks.
 - Publish the current development improvements in a follow-up release.
 
