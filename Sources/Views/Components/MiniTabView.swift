@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - Theme Colors
 
 enum BarTheme {
-    static let background    = Color(red: 0.10, green: 0.10, blue: 0.12, opacity: 0.58)  // dark glass overlay
+    /// Neutral dark bar surface; the bar applies the user's opacity on top (AppSettings.barOpacity).
+    static let surface       = Color(red: 0.08, green: 0.08, blue: 0.095)  // #141418
     static let tabBackground = Color(red: 0.16, green: 0.16, blue: 0.19)  // #292930
     static let activeTab     = Color(red: 0.30, green: 0.70, blue: 0.45)  // #4db373 (subtle green)
     static let activeText    = Color(red: 0.10, green: 0.10, blue: 0.12)  // dark text on green
@@ -20,6 +21,7 @@ enum BarTheme {
     static let badgeMic      = Color(red: 0.95, green: 0.60, blue: 0.20)  // orange
     static let badgeDate     = Color(red: 0.55, green: 0.75, blue: 0.95)  // light blue
     static let badgeMusic    = Color(red: 0.30, green: 0.85, blue: 0.55)  // spotify green
+    static let badgeVpn      = Color(red: 0.35, green: 0.80, blue: 0.80)  // teal
 }
 
 // MARK: - MiniTabView

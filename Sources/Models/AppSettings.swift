@@ -12,6 +12,43 @@ final class AppSettings: ObservableObject {
     @AppStorage("launchAtLogin") var launchAtLogin: Bool = false
     @AppStorage("previewTimezone") var previewTimezone: String = ""
     @AppStorage("temperatureUnit") var temperatureUnit: String = "C"
+
+    // MARK: Appearance
+
+    /// Opacity of the bar background (0.6-1.0). Lower values let the wallpaper show through.
+    @AppStorage("barOpacity") var barOpacity: Double = 0.94
+    /// When true the notch badge uses the bar color; otherwise pure black.
+    @AppStorage("notchBadgeMatchesBar") var notchBadgeMatchesBar: Bool = false
+
+    /// Every widget the bar knows how to render, in default order.
+    static let knownWidgets: [String] = ["RAM", "CPU", "Temperature", "GPU", "MIC", "VOL", "Tailscale", "Keyboard", "Battery"]
+
+    /// Human-readable name for a widget identifier.
+    static func widgetDisplayName(_ id: String) -> String {
+        switch id {
+        case "RAM": return "Memory"
+        case "CPU": return "CPU"
+        case "GPU": return "GPU"
+        case "MIC": return "Microphone"
+        case "VOL": return "Volume"
+        case "Tailscale": return "Tailscale VPN"
+        case "Keyboard": return "Keyboard input"
+        default: return id
+        }
+    }
+
+    /// Drops widgets the bar no longer renders and appends known widgets missing from the
+    /// stored order as hidden, so they can be enabled.
+    func reconcileWidgets() {
+        let known = Set(Self.knownWidgets)
+        let cleaned = widgetOrder.filter { known.contains($0) }
+        let missing = Self.knownWidgets.filter { !cleaned.contains($0) }
+        guard cleaned != widgetOrder || !missing.isEmpty else { return }
+        widgetOrder = cleaned + missing
+        for id in missing where widgetVisibility[id] == nil {
+            widgetVisibility[id] = false
+        }
+    }
     
     @AppStorage("geminiPath") var geminiPath: String = "/opt/homebrew/bin/gemini"
     @AppStorage("isAIMonitoringEnabled") var isAIMonitoringEnabled: Bool = false

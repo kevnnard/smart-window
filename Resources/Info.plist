@@ -34,6 +34,10 @@
     <key>NSAccessibilityUsageDescription</key>
     <string>SmartWindow needs Accessibility access to detect and manage your open windows, read window titles, and switch between them.</string>
     
+    <!-- Apple Events (AppleScript to Spotify / Music for Now Playing) -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>SmartWindow asks Spotify and Music what is playing to show the current track in the notch.</string>
+
     <!-- Supports Retina -->
     <key>NSHighResolutionCapable</key>
     <true/>

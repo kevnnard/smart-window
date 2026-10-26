@@ -2,86 +2,17 @@ import AppKit
 import Combine
 import Foundation
 
-// MARK: - MRMediaRemote Dynamic Loading
-
-/// Safely loads MediaRemote private framework symbols via dlsym.
-/// This avoids crashes from incorrect @_silgen_name type bridging on macOS 26+.
-private enum MediaRemoteLoader {
-
-    private static let handle: UnsafeMutableRawPointer? = {
-        dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY)
-    }()
-
-    // MARK: - Function Types
-
-    // void MRMediaRemoteGetNowPlayingInfo(dispatch_queue_t queue, void (^handler)(CFDictionaryRef _Nullable info))
-    private typealias GetNowPlayingInfoFn = @convention(c) (
-        DispatchQueue,
-        @escaping @convention(block) (CFDictionary?) -> Void
-    ) -> Void
-
-    // void MRMediaRemoteGetNowPlayingApplicationIsPlaying(dispatch_queue_t queue, void (^handler)(Boolean isPlaying))
-    private typealias GetIsPlayingFn = @convention(c) (
-        DispatchQueue,
-        @escaping @convention(block) (Bool) -> Void
-    ) -> Void
-
-    // void MRMediaRemoteRegisterForNowPlayingNotifications(dispatch_queue_t queue)
-    private typealias RegisterNotificationsFn = @convention(c) (DispatchQueue) -> Void
-
-    // MARK: - Safe Calls
-
-    static func getNowPlayingInfo(queue: DispatchQueue, handler: @escaping ([String: Any]) -> Void) {
-        guard let h = handle,
-              let sym = dlsym(h, "MRMediaRemoteGetNowPlayingInfo") else {
-            handler([:])
-            return
-        }
-        let fn = unsafeBitCast(sym, to: GetNowPlayingInfoFn.self)
-        fn(queue) { cfDict in
-            if let cfDict {
-                let dict = cfDict as NSDictionary as! [String: Any]
-                handler(dict)
-            } else {
-                handler([:])
-            }
-        }
-    }
-
-    static func getIsPlaying(queue: DispatchQueue, handler: @escaping (Bool) -> Void) {
-        guard let h = handle,
-              let sym = dlsym(h, "MRMediaRemoteGetNowPlayingApplicationIsPlaying") else {
-            handler(false)
-            return
-        }
-        let fn = unsafeBitCast(sym, to: GetIsPlayingFn.self)
-        fn(queue, handler)
-    }
-
-    static func registerNotifications(queue: DispatchQueue) {
-        guard let h = handle,
-              let sym = dlsym(h, "MRMediaRemoteRegisterForNowPlayingNotifications") else {
-            return
-        }
-        let fn = unsafeBitCast(sym, to: RegisterNotificationsFn.self)
-        fn(queue)
-    }
-}
-
-// Known MRMediaRemote info keys
-private let kMRMediaRemoteNowPlayingInfoTitle  = "kMRMediaRemoteNowPlayingInfoTitle"
-private let kMRMediaRemoteNowPlayingInfoArtist = "kMRMediaRemoteNowPlayingInfoArtist"
-private let kMRMediaRemoteNowPlayingInfoAlbum  = "kMRMediaRemoteNowPlayingInfoAlbum"
-
-// Notification names for Now Playing changes
-private let kMRMediaRemoteNowPlayingInfoDidChangeNotification =
-    NSNotification.Name("kMRMediaRemoteNowPlayingInfoDidChangeNotification")
-private let kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification =
-    NSNotification.Name("kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification")
-
 // MARK: - NowPlayingService
 
-/// Monitors the currently playing media track (Spotify, Apple Music, etc.)
+/// Monitors the current track in Spotify or Apple Music.
+///
+/// Uses the players' AppleScript dictionaries. The private MediaRemote framework
+/// no longer returns now-playing data to third-party apps since macOS 15.4, so it
+/// is not used. Apple Events require `com.apple.security.automation.apple-events`
+/// in the signed bundle's entitlements and `NSAppleEventsUsageDescription` in Info.plist.
+///
+/// A player counts as present while its app is running, even when paused; the
+/// state only clears when the player quits.
 @MainActor
 final class NowPlayingService: ObservableObject {
 
@@ -91,147 +22,193 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var trackTitle: String = ""
     @Published private(set) var artistName: String = ""
     @Published private(set) var albumName: String = ""
+    /// Bundle identifier of the running player, if any (set even while paused).
+    @Published private(set) var playerBundleIdentifier: String?
+    /// Album artwork when the player exposes it (Spotify), else nil.
+    @Published private(set) var artwork: NSImage?
 
-    /// Formatted "Artist – Title" for display in the bar
+    /// Formatted "Artist — Title" for display in the bar
     var displayText: String {
-        guard isPlaying, !trackTitle.isEmpty else { return "" }
+        guard !trackTitle.isEmpty else { return "" }
         if artistName.isEmpty { return trackTitle }
         return "\(artistName) — \(trackTitle)"
     }
 
-    /// Whether there's something worth showing
+    /// A player is running and reports a track (playing or paused).
     var hasTrack: Bool {
-        isPlaying && !trackTitle.isEmpty
+        playerBundleIdentifier != nil && !trackTitle.isEmpty
     }
 
-    private var observers: [NSObjectProtocol] = []
-    private var fallbackTimer: Timer?
+    /// A player is running at all.
+    var hasPlayer: Bool {
+        playerBundleIdentifier != nil
+    }
+
+    /// Icon of the running player, for the notch badge when no artwork exists.
+    var playerIcon: NSImage? {
+        guard let id = playerBundleIdentifier,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    // MARK: - Actions
+
+    /// Brings the running player to the front. Does nothing when no player is running.
+    func openPlayer() {
+        guard let id = playerBundleIdentifier else { return }
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
+            app.activate()
+            return
+        }
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
+    // MARK: - Players
+
+    struct Player {
+        let bundleIdentifier: String
+        let scriptName: String
+        /// AppleScript expression yielding an artwork URL for `t`, or nil when unsupported.
+        let artworkExpression: String?
+    }
+
+    static let players: [Player] = [
+        Player(bundleIdentifier: "com.spotify.client", scriptName: "Spotify", artworkExpression: "artwork url of t"),
+        Player(bundleIdentifier: "com.apple.Music", scriptName: "Music", artworkExpression: nil),
+    ]
+
+    struct Snapshot: Equatable {
+        var isPlaying: Bool
+        var title: String
+        var artist: String
+        var album: String
+        var bundleIdentifier: String?
+        var artworkURL: URL?
+
+        static let idle = Snapshot(isPlaying: false, title: "", artist: "", album: "", bundleIdentifier: nil, artworkURL: nil)
+    }
+
+    private var pollTimer: Timer?
+    private var compiledScripts: [String: NSAppleScript] = [:]
+    private let pollInterval: TimeInterval = 2.0
+    private var artworkURL: URL?
+    private var artworkTask: Task<Void, Never>?
 
     init() {
-        // Delay registration to avoid dispatch_once issues during SwiftUI layout
+        // Delay start to avoid dispatch_once issues during SwiftUI layout
         DispatchQueue.main.async { [weak self] in
-            self?.startListening()
+            self?.startPolling()
         }
     }
 
-    // MARK: - Start Listening
+    deinit {
+        pollTimer?.invalidate()
+        artworkTask?.cancel()
+    }
 
-    private func startListening() {
-        // Register for notifications from the private API
-        MediaRemoteLoader.registerNotifications(queue: .main)
+    // MARK: - Polling
 
-        // Listen for track changes
-        let infoObserver = NotificationCenter.default.addObserver(
-            forName: kMRMediaRemoteNowPlayingInfoDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.fetchNowPlaying()
-            }
-        }
-        observers.append(infoObserver)
-
-        // Listen for play/pause changes
-        let playingObserver = NotificationCenter.default.addObserver(
-            forName: kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.fetchPlayingState()
-            }
-        }
-        observers.append(playingObserver)
-
-        // Fetch initial state
-        fetchNowPlaying()
-        fetchPlayingState()
-
-        // Setup a timer to periodically poll via AppleScript in case notifications fail (common with Spotify)
-        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.fetchAppleScriptFallback()
-            }
+    private func startPolling() {
+        poll()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.poll() }
         }
     }
 
-    // MARK: - Fetch Data
+    private func poll() {
+        apply(Self.readSnapshot(using: &compiledScripts))
+    }
 
-    private func fetchNowPlaying() {
-        MediaRemoteLoader.getNowPlayingInfo(queue: .main) { [weak self] info in
-            Task { @MainActor in
-                guard let self else { return }
-                let title = info[kMRMediaRemoteNowPlayingInfoTitle] as? String ?? ""
-                let artist = info[kMRMediaRemoteNowPlayingInfoArtist] as? String ?? ""
-                let album  = info[kMRMediaRemoteNowPlayingInfoAlbum] as? String ?? ""
-                
-                if title.isEmpty {
-                    self.fetchAppleScriptFallback()
-                } else {
-                    self.trackTitle = title
-                    self.artistName = artist
-                    self.albumName = album
-                }
-            }
+    private func apply(_ snapshot: Snapshot) {
+        if snapshot.isPlaying != isPlaying { isPlaying = snapshot.isPlaying }
+        if snapshot.title != trackTitle { trackTitle = snapshot.title }
+        if snapshot.artist != artistName { artistName = snapshot.artist }
+        if snapshot.album != albumName { albumName = snapshot.album }
+        if snapshot.bundleIdentifier != playerBundleIdentifier { playerBundleIdentifier = snapshot.bundleIdentifier }
+        if snapshot.artworkURL != artworkURL {
+            artworkURL = snapshot.artworkURL
+            loadArtwork(from: snapshot.artworkURL)
         }
     }
 
-    private func fetchPlayingState() {
-        MediaRemoteLoader.getIsPlaying(queue: .main) { [weak self] playing in
-            Task { @MainActor in
-                guard let self else { return }
-                if !playing {
-                    self.fetchAppleScriptFallback()
-                } else {
-                    self.isPlaying = playing
-                }
-            }
+    private func loadArtwork(from url: URL?) {
+        artworkTask?.cancel()
+        guard let url else {
+            artwork = nil
+            return
+        }
+        artworkTask = Task { [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  !Task.isCancelled,
+                  let image = NSImage(data: data) else { return }
+            self?.artwork = image
         }
     }
 
-    private func fetchAppleScriptFallback() {
-        Task.detached { [weak self] in
-            let scriptSource = """
-            if application "Spotify" is running then
-                tell application "Spotify"
-                    if player state is playing then
-                        return "PLAYING|" & name of current track & "|" & artist of current track
-                    else
-                        return "PAUSED"
-                    end if
-                end tell
-            else if application "Music" is running then
-                tell application "Music"
-                    if player state is playing then
-                        return "PLAYING|" & name of current track & "|" & artist of current track
-                    else
-                        return "PAUSED"
-                    end if
-                end tell
-            end if
-            return "UNKNOWN"
+    // MARK: - AppleScript
+
+    /// The first running player that is playing wins. Otherwise the first running
+    /// player (paused) is reported so the badge stays while the app is open.
+    /// Only running players are queried so AppleScript never launches them.
+    static func readSnapshot(using cache: inout [String: NSAppleScript]) -> Snapshot {
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        var paused: Snapshot?
+        for player in players where running.contains(player.bundleIdentifier) {
+            guard let snapshot = query(player, cache: &cache) else { continue }
+            if snapshot.isPlaying { return snapshot }
+            if paused == nil { paused = snapshot }
+        }
+        return paused ?? .idle
+    }
+
+    private static func query(_ player: Player, cache: inout [String: NSAppleScript]) -> Snapshot? {
+        let script: NSAppleScript
+        if let cached = cache[player.scriptName] {
+            script = cached
+        } else {
+            let artworkLine = player.artworkExpression.map { "& linefeed & (\($0))" } ?? ""
+            let source = """
+            tell application "\(player.scriptName)"
+                set stateText to "PAUSED"
+                if player state is playing then set stateText to "PLAYING"
+                try
+                    set t to current track
+                    return stateText & linefeed & (name of t) & linefeed & (artist of t) & linefeed & (album of t) \(artworkLine)
+                on error
+                    return stateText
+                end try
+            end tell
             """
-            
-            var error: NSDictionary?
-            if let script = NSAppleScript(source: scriptSource) {
-                let descriptor = script.executeAndReturnError(&error)
-                if let result = descriptor.stringValue {
-                    guard let self = self else { return }
-                    Task { @MainActor in
-                        if result.hasPrefix("PLAYING|") {
-                            let parts = result.components(separatedBy: "|")
-                            if parts.count >= 3 {
-                                self.isPlaying = true
-                                self.trackTitle = parts[1]
-                                self.artistName = parts[2]
-                            }
-                        } else if result == "PAUSED" {
-                            self.isPlaying = false
-                        }
-                    }
-                }
-            }
+            guard let compiled = NSAppleScript(source: source) else { return nil }
+            var compileError: NSDictionary?
+            guard compiled.compileAndReturnError(&compileError) else { return nil }
+            cache[player.scriptName] = compiled
+            script = compiled
         }
+
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        guard error == nil, let text = result.stringValue else { return nil }
+        return parse(text, bundleIdentifier: player.bundleIdentifier)
+    }
+
+    /// Parses the script output. Visible for verification.
+    static func parse(_ text: String, bundleIdentifier: String) -> Snapshot {
+        let lines = text.components(separatedBy: "\n")
+        let playing = lines.first == "PLAYING"
+        guard lines.count >= 4 else {
+            return Snapshot(isPlaying: playing, title: "", artist: "", album: "", bundleIdentifier: bundleIdentifier, artworkURL: nil)
+        }
+        let artworkURL = lines.count >= 5 ? URL(string: lines[4]) : nil
+        return Snapshot(
+            isPlaying: playing,
+            title: lines[1],
+            artist: lines[2],
+            album: lines[3],
+            bundleIdentifier: bundleIdentifier,
+            artworkURL: artworkURL
+        )
     }
 }

@@ -55,19 +55,7 @@ final class NotchController: NSObject, ObservableObject {
                 continue
             }
             
-            let panel = NotchOverlayWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 240, height: 44),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            
-            // All panels share the same NowPlayingService
-            let contentView = NSHostingView(
-                rootView: NotchView(nowPlaying: nowPlayingService)
-            )
-            
-            panel.contentView = contentView
+            let panel = makePanel(for: screen)
             panels[displayID] = panel
             
             // Position this panel on its screen
@@ -118,18 +106,7 @@ final class NotchController: NSObject, ObservableObject {
             }
             
             if panels[displayID] == nil {
-                let panel = NotchOverlayWindow(
-                    contentRect: NSRect(x: 0, y: 0, width: 240, height: 44),
-                    styleMask: [.borderless, .nonactivatingPanel],
-                    backing: .buffered,
-                    defer: false
-                )
-                
-                let contentView = NSHostingView(
-                    rootView: NotchView(nowPlaying: nowPlayingService)
-                )
-                
-                panel.contentView = contentView
+                let panel = makePanel(for: screen)
                 panels[displayID] = panel
                 panel.orderFront(nil)
             }
@@ -152,14 +129,28 @@ final class NotchController: NSObject, ObservableObject {
         }
     }
     
+    /// Builds a panel sized to the screen's notch geometry. All panels share the same NowPlayingService.
+    private func makePanel(for screen: NSScreen) -> NotchOverlayWindow {
+        let layout = NotchLayout.forScreen(screen)
+        let panel = NotchOverlayWindow(
+            contentRect: NSRect(origin: .zero, size: layout.panelSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = NSHostingView(
+            rootView: NotchView(nowPlaying: nowPlayingService, layout: layout)
+        )
+        return panel
+    }
+
     /// Positions a panel centered at the top of the given screen
     private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen) {
         let screenFrame = screen.frame
         
         panel.contentView?.layoutSubtreeIfNeeded()
-        // Physical macOS notch is ~208px wide. We use ~240px to leave ~16px on each side
-        // for icons to peek out right next to the notch. Height: 32px normal, 44px when expanded.
-        let panelSize = NSSize(width: 240, height: 44)
+        // Width hugs the physical notch plus a wing on each side (or a compact pill without a notch).
+        let panelSize = NotchLayout.forScreen(screen).panelSize
         panel.setContentSize(panelSize)
         
         let x = screenFrame.minX + (screenFrame.width - panelSize.width) / 2

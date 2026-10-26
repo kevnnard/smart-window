@@ -10,6 +10,7 @@ struct TabBarView: View {
 
     @EnvironmentObject var windowManager: WindowManager
     @EnvironmentObject var overlayController: OverlayPanelController
+    @ObservedObject private var settings = AppSettings.shared
     // Note: nowPlaying environment object still injected but now displayed only in Notch
 
     private let leftPadding: CGFloat = 8
@@ -30,7 +31,7 @@ struct TabBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: TabBarConstants.barHeight)
-        .background(BarTheme.background)
+        .background(BarTheme.surface.opacity(settings.barOpacity))
     }
 
     private var notchedBar: some View {
