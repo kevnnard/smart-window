@@ -50,6 +50,7 @@ struct MiniTabView: View {
     let index: Int
     let isActive: Bool
     let compactness: MiniTabCompactness
+    var width: CGFloat? = nil
     let onSelect: () -> Void
 
     private var labelText: String {
@@ -64,6 +65,7 @@ struct MiniTabView: View {
     }
 
     private var labelWidth: CGFloat? {
+        if width != nil { return nil }
         switch compactness {
         case .regular:
             return isActive ? 120 : 88
@@ -105,6 +107,7 @@ struct MiniTabView: View {
                 .foregroundStyle(isActive ? BarTheme.activeText : BarTheme.inactiveText)
                 .frame(maxWidth: labelWidth, alignment: .leading)
         }
+        .frame(width: width.map { max(0, $0 - horizontalPadding * 2) }, alignment: .leading)
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, 4)
         .background(
@@ -118,6 +121,9 @@ struct MiniTabView: View {
                     lineWidth: isActive ? 1 : 0.5
                 )
         )
+        .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
+        .help(window.title.isEmpty || window.title == window.appName
+              ? window.appName : "\(window.appName) — \(window.title)")
     }
 }

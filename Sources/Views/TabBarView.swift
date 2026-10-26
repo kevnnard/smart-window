@@ -109,8 +109,12 @@ private struct AdaptiveTabStrip: View {
     @State private var query = ""
     @FocusState private var searchFocused: Bool
 
+    private var tabWidths: [Double] {
+        windows.enumerated().map { WindowOverflowPolicy.measuredTabWidth(appName: $0.element.appName, index: $0.offset + 1) }
+    }
+
     private var visibleCount: Int {
-        WindowOverflowPolicy.visibleCount(total: windows.count,
+        WindowOverflowPolicy.visibleCount(widths: tabWidths,
             width: Double(max(0, availableWidth - leadingPadding - trailingPadding)))
     }
 
@@ -125,8 +129,7 @@ private struct AdaptiveTabStrip: View {
             ForEach(Array(windows.prefix(visibleCount).enumerated()), id: \.element.id) { index, window in
                 MiniTabView(window: window, index: index + 1,
                     isActive: window.id == activeWindowId, compactness: .regular,
-                    onSelect: { onSelect(window) })
-                    .frame(width: WindowOverflowPolicy.tabWidth)
+                    width: CGFloat(tabWidths[index]), onSelect: { onSelect(window) })
             }
             if visibleCount < windows.count {
                 Button { query = ""; showOverflow.toggle() } label: {
@@ -139,11 +142,6 @@ private struct AdaptiveTabStrip: View {
                 .help("Search all windows")
                 .accessibilityLabel("Search all windows, \(windows.count - visibleCount) more")
                 .popover(isPresented: $showOverflow, arrowEdge: .bottom) { overflowContent }
-            }
-            if visibleCount == windows.count,
-               availableWidth - leadingPadding - trailingPadding - CGFloat(windows.count) * (WindowOverflowPolicy.tabWidth + WindowOverflowPolicy.spacing) >= 150,
-               let activeWindow = windows.first(where: { $0.id == activeWindowId }) {
-                ActiveWindowTitleView(text: activeWindow.title.isEmpty ? activeWindow.appName : activeWindow.title, maxWidth: 180)
             }
             Spacer(minLength: 0)
         }
@@ -205,27 +203,6 @@ private struct AdaptiveTabStrip: View {
     private func select(_ window: WindowInfo) {
         showOverflow = false
         onSelect(window)
-    }
-}
-
-private struct ActiveWindowTitleView: View {
-    let text: String
-    let maxWidth: CGFloat
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(">")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(BarTheme.dimText)
-
-            Text(text)
-                .font(.system(size: 11, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(BarTheme.inactiveText)
-                .frame(maxWidth: maxWidth, alignment: .leading)
-        }
-        .padding(.horizontal, 4)
     }
 }
 
