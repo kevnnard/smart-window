@@ -48,20 +48,12 @@ printf 'Building %s in release mode...\n' "$APP_NAME"
 cd "$ROOT_DIR"
 swift build -c release
 
-EXECUTABLE_PATH=""
-for candidate in \
-    "$ROOT_DIR/.build/release/$APP_NAME" \
-    "$ROOT_DIR/.build/arm64-apple-macosx/release/$APP_NAME" \
-    "$ROOT_DIR/.build/x86_64-apple-macosx/release/$APP_NAME"
-do
-    if [ -f "$candidate" ]; then
-        EXECUTABLE_PATH="$candidate"
-        break
-    fi
-done
-
-if [ -z "$EXECUTABLE_PATH" ]; then
-    printf 'Error: could not find built executable for %s\n' "$APP_NAME" >&2
+# Query this toolchain/build system, rather than accidentally packaging an older
+# executable left behind by a different Swift build layout.
+BIN_PATH="$(swift build -c release --show-bin-path)"
+EXECUTABLE_PATH="$BIN_PATH/$APP_NAME"
+if [ ! -f "$EXECUTABLE_PATH" ]; then
+    printf 'Error: could not find built executable at %s\n' "$EXECUTABLE_PATH" >&2
     exit 1
 fi
 

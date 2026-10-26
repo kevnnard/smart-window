@@ -281,7 +281,21 @@ Apple Events entitlement needed for player automation.
 
 ### Verification
 
-The package currently has no automated SwiftPM test target. The Tailscale probe
+The package currently has no automated SwiftPM test target. The packaging probe
+runs the public installer against an isolated fake Swift toolchain, without
+installing or signing. It verifies fresh-output selection and preserves an existing
+bundle when Swift's reported executable is missing:
+
+```bash
+mkdir -p .build/probes
+python3 Tests/Probes/ReleasePackagingProbe.py
+```
+
+The packager resolves the executable with `swift build -c release --show-bin-path`.
+It stops with `Error: could not find built executable at <path>` before replacing
+the bundle if that exact output is missing; it never falls back to an older build.
+
+The Tailscale probe
 covers state parsing, duration boundaries, bounded subprocess handling, and the
 sleep-reset notification without changing VPN state:
 
