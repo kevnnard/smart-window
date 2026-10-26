@@ -121,6 +121,7 @@ private struct PaneIcon: View {
 
 private struct GeneralPane: View {
     @ObservedObject private var login = LoginItemService.shared
+    @ObservedObject private var focusMode = FocusMode.shared
 
     var body: some View {
         Form {
@@ -141,6 +142,14 @@ private struct GeneralPane: View {
                 Text(login.status == .unavailable
                      ? "Launch at login is available in the installed app bundle, not the development executable."
                      : "Managed by macOS Login Items. Changes outside SmartWindow are reflected here.")
+            }
+
+            Section {
+                Toggle("Focus mode", isOn: $focusMode.isEnabled)
+            } header: {
+                Text("Focus")
+            } footer: {
+                Text("Hide secondary widgets on all displays, keeping windows, clock and music. Use the moon in the bar to toggle without opening Settings.")
             }
 
             Section {

@@ -7,6 +7,7 @@ import Combine
 struct SystemInfoView: View {
     var displayKey: String? = nil
     @ObservedObject private var displayPreferences = DisplayPreferences.shared
+    @ObservedObject private var focusMode = FocusMode.shared
     @EnvironmentObject var systemMonitor: SystemMonitorService
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var tempService = TemperatureService()
@@ -77,16 +78,31 @@ struct SystemInfoView: View {
         }
     }
 
+    private var visibleWidgets: [String] {
+        focusMode.visibleWidgets(in: settings.widgetOrder) {
+            displayPreferences.widgetVisible($0, on: displayKey, global: settings.widgetVisibility[$0] ?? true)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) { // Consistent spacing
-            ForEach(settings.widgetOrder, id: \.self) { widgetId in
-                if displayPreferences.widgetVisible(widgetId, on: displayKey, global: settings.widgetVisibility[widgetId] ?? true) {
-                    badge(for: widgetId)
-                    if settings.separatorPositions.contains(widgetId) || widgetId == "Battery" {
-                        Separator()
-                    }
+            ForEach(visibleWidgets, id: \.self) { widgetId in
+                badge(for: widgetId)
+                if settings.separatorPositions.contains(widgetId) || widgetId == "Battery" {
+                    Separator()
                 }
             }
+
+            Button { focusMode.isEnabled.toggle() } label: {
+                Image(systemName: focusMode.isEnabled ? "moon.fill" : "moon")
+                    .foregroundStyle(focusMode.isEnabled ? BarTheme.activeTab : BarTheme.dimText)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(focusMode.isEnabled ? "Exit focus mode" : "Enter focus mode")
+            .accessibilityLabel("Focus mode")
+            .accessibilityValue(focusMode.isEnabled ? "On" : "Off")
 
             // Date + Time (active)
             ActiveTimezoneBadge(

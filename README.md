@@ -94,6 +94,13 @@ and ⌥1–9 shortcuts are preserved instead of squeezing every tab.
 When Finder has no ordinary window to focus, selecting its desktop entry opens
 the Desktop folder instead of doing nothing.
 
+### Focus mode
+
+Click the **moon** in the bar to hide secondary widgets on every display, leaving
+window tabs, the clock and music. Click again to restore your global and per-display
+widget choices, unchanged. The moon remains available so you can leave focus mode.
+This setting persists across relaunches and is also available in Settings → General.
+
 ### Now Playing
 
 A compact badge sits around the MacBook notch or below the top edge on displays
@@ -296,6 +303,23 @@ original source when the check returns, including on reported failures:
 
 ```bash
 .build/probes/keyboard-input-probe --switch
+```
+
+Desktop-controls probes use fake login/player executors and isolated preference
+suites; they do not register login items, change playback, or overwrite your settings:
+
+```bash
+mkdir -p .build/probes
+swiftc Sources/Services/LoginItemService.swift Tests/Probes/LoginItemProbe.swift -o .build/probes/login-item-probe
+.build/probes/login-item-probe
+swiftc Sources/Services/NowPlayingService.swift Tests/Probes/NowPlayingControlsProbe.swift -o .build/probes/media-controls-probe
+.build/probes/media-controls-probe
+swiftc Sources/Models/WindowOverflowPolicy.swift Tests/Probes/WindowOverflowProbe.swift -o .build/probes/overflow-probe
+.build/probes/overflow-probe
+swiftc Sources/Models/DisplayPreferences.swift Tests/Probes/DisplayPreferencesProbe.swift -o .build/probes/displays-probe
+.build/probes/displays-probe
+swiftc Sources/Models/FocusMode.swift Sources/Models/DisplayPreferences.swift Tests/Probes/FocusModeProbe.swift -o .build/probes/focus-probe
+.build/probes/focus-probe
 ```
 
 Hardware readings, player permissions, and UI behavior still need checks on a real
