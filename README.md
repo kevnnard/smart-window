@@ -87,6 +87,10 @@ Numbered tabs such as `1 · Finder`, `2 · Ghostty`, and `3 · Safari` let you f
 window with a click or a shortcut. Each monitor gets its own bar, and entering
 fullscreen hides the bar only on the affected screen.
 
+When tabs no longer fit, `+N` opens a searchable list of all windows. Search by app
+or window title; Return selects the first result. Original ordering, tab numbers,
+and ⌥1–9 shortcuts are preserved instead of squeezing every tab.
+
 When Finder has no ordinary window to focus, selecting its desktop entry opens
 the Desktop folder instead of doing nothing.
 
