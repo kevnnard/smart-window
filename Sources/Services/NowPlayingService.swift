@@ -12,7 +12,7 @@ public struct AudioSourceInfo: Identifiable, Equatable {
     public let icon: NSImage?
     /// The source is the main one shown in the pill and targeted by the controls.
     public let isActive: Bool
-    /// A process of the source is outputting audio, or its player reports playing.
+    /// A process of the source is outputting audio (on macOS 13, the player state for AppleScript players).
     public let isPlaying: Bool
 
     public init(id: String, name: String, category: String, icon: NSImage?, isActive: Bool, isPlaying: Bool = false) {
@@ -54,8 +54,11 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var sourceCategory: String = "spotify"
     /// Active media/audio sources detected on the system.
     @Published private(set) var detectedSources: [AudioSourceInfo] = []
-    /// Source chosen by the user; cleared when it is no longer detected.
+    /// Source chosen by the user; cleared when it is no longer detected, or stops while another source plays.
     @Published private(set) var selectedSourceID: String?
+    /// Whether the selected source has been seen playing since it was selected. A source picked
+    /// while paused stays selected until it plays and then stops.
+    private var selectionWasPlaying = false
 
     /// There is a main source the transport controls can target.
     var canControl: Bool {
@@ -89,10 +92,11 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: - Actions
 
-    /// Makes the source the main one shown and controlled while it stays detected.
+    /// Makes the source the main one shown and controlled; the rule in `retainedSelection` keeps or clears it.
     func selectSource(_ id: String) {
-        guard detectedSources.contains(where: { $0.id == id }) else { return }
+        guard let source = detectedSources.first(where: { $0.id == id }) else { return }
         if selectedSourceID != id { selectedSourceID = id }
+        selectionWasPlaying = source.isPlaying
         recompute()
     }
 
@@ -104,6 +108,8 @@ final class NowPlayingService: ObservableObject {
 
     /// Brings the specified application or audio source to the front.
     func openSource(_ bundleIdentifier: String) {
+        // Generic sources have no app to bring forward.
+        guard !Self.isSyntheticSource(bundleIdentifier) else { return }
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
             app.activate()
             return
@@ -248,10 +254,16 @@ final class NowPlayingService: ObservableObject {
 
     /// Picks the main source from the last poll and publishes only the values that changed.
     private func recompute() {
-        if let selected = selectedSourceID, !candidateSources.contains(where: { $0.id == selected }) {
-            selectedSourceID = nil
+        let retained = Self.retainedSelection(selectedSourceID, selectionWasPlaying: selectionWasPlaying,
+                                              sources: candidateSources)
+        if retained != selectedSourceID { selectedSourceID = retained }
+        if let retained, candidateSources.contains(where: { $0.id == retained && $0.isPlaying }) {
+            selectionWasPlaying = true
+        } else if retained == nil {
+            selectionWasPlaying = false
         }
-        let mainID = Self.mainSource(selected: selectedSourceID, sources: candidateSources)
+        let mainID = Self.mainSource(selected: selectedSourceID, selectionWasPlaying: selectionWasPlaying,
+                                     sources: candidateSources)
         let sources = candidateSources.map {
             AudioSourceInfo(id: $0.id, name: $0.name, category: $0.category, icon: $0.icon,
                             isActive: $0.id == mainID, isPlaying: $0.isPlaying)
@@ -291,18 +303,35 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: - Sources
 
-    /// Placeholder source when only device-level output is known (macOS 13).
-    static let systemAudioID = "system-audio"
+    /// Generic source for unattributed output, and the placeholder when only device-level output is known (macOS 13).
+    static let systemAudioID = AudioSourceDetector.systemAudioID
 
-    /// Running AppleScript players (playing or paused) first, then other apps outputting audio.
-    /// Without per-process data a generic system source stands in for unattributed output.
+    /// Generic sources that do not correspond to an app bundle.
+    static func isSyntheticSource(_ id: String) -> Bool {
+        id == AudioSourceDetector.systemAudioID || id == AudioSourceDetector.webAudioID
+    }
+
+    /// The selection holds while it is detected, unless it was playing, stopped, and another source
+    /// now plays; then it is cleared so selection falls back to automatic. A source picked while
+    /// paused (`selectionWasPlaying == false`) therefore stays the main source after the click.
+    static func retainedSelection(_ selected: String?, selectionWasPlaying: Bool = true,
+                                  sources: [AudioSourceInfo]) -> String? {
+        guard let selected, let source = sources.first(where: { $0.id == selected }) else { return nil }
+        if source.isPlaying || !selectionWasPlaying || !sources.contains(where: \.isPlaying) { return selected }
+        return nil
+    }
+
+    /// Running AppleScript players (playing or paused) first, then other sources outputting audio.
+    /// With per-process data a player plays only while one of its processes outputs audio; without it
+    /// (macOS 13) the player state is used and a generic system source stands in for unattributed output.
     static func mergeSources(players snapshots: [Snapshot], resolved: [AudioSourceDetector.ResolvedSource]?,
                              deviceOutputActive: Bool, icon: (String) -> NSImage?) -> [AudioSourceInfo] {
         var sources: [AudioSourceInfo] = snapshots.compactMap { snapshot in
             guard let id = snapshot.bundleIdentifier else { return nil }
-            let outputting = resolved?.contains(where: { $0.bundleID == id && $0.isPlaying }) ?? false
+            let playing = resolved.map { $0.contains(where: { $0.bundleID == id && $0.isPlaying }) }
+                ?? snapshot.isPlaying
             return AudioSourceInfo(id: id, name: displayNameForBundleID(id), category: categoryForBundleID(id),
-                                   icon: icon(id), isActive: false, isPlaying: snapshot.isPlaying || outputting)
+                                   icon: icon(id), isActive: false, isPlaying: playing)
         }
         if let resolved {
             for source in resolved where source.isPlaying && !sources.contains(where: { $0.id == source.bundleID }) {
@@ -317,10 +346,12 @@ final class NowPlayingService: ObservableObject {
         return sources
     }
 
-    /// Selected source if still detected; otherwise playing AppleScript player, first playing
-    /// source, paused AppleScript player, or nil (idle).
-    static func mainSource(selected: String?, sources: [AudioSourceInfo]) -> String? {
-        if let selected, sources.contains(where: { $0.id == selected }) { return selected }
+    /// Retained selection (see `retainedSelection`); otherwise playing AppleScript player, first
+    /// playing source, paused AppleScript player, or nil (idle).
+    static func mainSource(selected: String?, selectionWasPlaying: Bool = true,
+                           sources: [AudioSourceInfo]) -> String? {
+        if let selected = retainedSelection(selected, selectionWasPlaying: selectionWasPlaying,
+                                            sources: sources) { return selected }
         func isPlayer(_ source: AudioSourceInfo) -> Bool {
             players.contains(where: { $0.bundleIdentifier == source.id })
         }
@@ -330,9 +361,13 @@ final class NowPlayingService: ObservableObject {
     }
 
     /// AppleScript players keep their metadata; other sources only report the app, never a track.
+    /// The playing state always comes from the merged source so the badge and the main display agree.
     static func snapshot(for main: AudioSourceInfo?, players snapshots: [Snapshot]) -> Snapshot {
         guard let main else { return .idle }
-        if let player = snapshots.first(where: { $0.bundleIdentifier == main.id }) { return player }
+        if var player = snapshots.first(where: { $0.bundleIdentifier == main.id }) {
+            player.isPlaying = main.isPlaying
+            return player
+        }
         let title: String
         switch main.category {
         case "youtube": title = "Web Audio"
@@ -344,6 +379,8 @@ final class NowPlayingService: ObservableObject {
     }
 
     static func categoryForBundleID(_ id: String) -> String {
+        if id == AudioSourceDetector.webAudioID { return "youtube" }
+        if id == AudioSourceDetector.systemAudioID { return "media" }
         let lower = id.lowercased()
         if lower.contains("spotify") { return "spotify" }
         let browsers = ["chrome", "safari", "browser", "brave", "firefox", "edgemac", "opera", "vivaldi", "zen"]

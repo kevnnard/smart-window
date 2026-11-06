@@ -57,7 +57,49 @@ struct AudioSourcesProbe {
         try check(unknown.first?.name == "Radio Kit", "unknown app keeps its real name")
 
         let orphan = resolve([.init(pid: 600, bundleID: "com.apple.some.daemon", isOutputting: true)])
-        try check(orphan.isEmpty, "unattributable process is not invented as a source")
+        try check(orphan == [.init(bundleID: "system-audio", name: "System Audio", isPlaying: true)], "unattributable outputting process is generic System Audio")
+
+        let webkit = resolve([.init(pid: 700, bundleID: "com.apple.WebKit.GPU", isOutputting: true),
+                              .init(pid: 701, bundleID: "com.apple.WebKit.WebContent", isOutputting: true)])
+        try check(webkit == [.init(bundleID: "webkit-audio", name: "Web content", isPlaying: true)], "unattributable WebKit output is one Web content source")
+        try check(!webkit.contains(where: { $0.bundleID == "com.apple.Safari" }), "WebKit audio is not attributed to Safari")
+
+        let silentOrphans = resolve([.init(pid: 600, bundleID: "com.apple.some.daemon", isOutputting: false),
+                                     .init(pid: 700, bundleID: "com.apple.WebKit.GPU", isOutputting: false)])
+        try check(silentOrphans.isEmpty, "unattributable silent process is dropped")
+
+        let noBundleOrphan = resolve([.init(pid: 600, bundleID: nil, isOutputting: true)])
+        try check(noBundleOrphan.map(\.bundleID) == ["system-audio"], "unattributable process without bundle id is System Audio")
+
+        // Merge: generic sources
+        let mergedWeb = NowPlayingService.mergeSources(players: [], resolved: webkit, deviceOutputActive: false, icon: { _ in nil })
+        try check(mergedWeb.count == 1 && mergedWeb[0].id == "webkit-audio" && mergedWeb[0].name == "Web content"
+                  && mergedWeb[0].category == "youtube" && mergedWeb[0].isPlaying, "Web content merges as a playing browser-styled source")
+        try check(NowPlayingService.route(for: "webkit-audio") == .mediaKey, "Web content uses media keys")
+        let mergedSystem = NowPlayingService.mergeSources(players: [], resolved: orphan, deviceOutputActive: false, icon: { _ in nil })
+        try check(mergedSystem.map(\.id) == ["system-audio"] && mergedSystem[0].category == "media" && mergedSystem[0].isPlaying, "System Audio merges as a playing media source")
+        try check(NowPlayingService.route(for: "system-audio") == .mediaKey, "System Audio uses media keys")
+        try check(NowPlayingService.isSyntheticSource("webkit-audio") && NowPlayingService.isSyntheticSource("system-audio")
+                  && !NowPlayingService.isSyntheticSource("com.google.Chrome"), "synthetic ids are not openable apps")
+
+        // Merge: playing state of AppleScript players
+        let spotifySnapshot = { (playing: Bool) in
+            NowPlayingService.Snapshot(isPlaying: playing, title: "Song", artist: "Band", album: "LP",
+                                       bundleIdentifier: "com.spotify.client", artworkURL: URL(string: "https://example.com/a.jpg"))
+        }
+        let spotifyOutput = AudioSourceDetector.ResolvedSource(bundleID: "com.spotify.client", name: "Spotify", isPlaying: true)
+        let claimsPlaying = NowPlayingService.mergeSources(players: [spotifySnapshot(true)], resolved: [], deviceOutputActive: false, icon: { _ in nil })
+        try check(claimsPlaying.map(\.isPlaying) == [false], "AppleScript playing without output is not playing (per-process mode)")
+        try check(NowPlayingService.snapshot(for: claimsPlaying.first, players: [spotifySnapshot(true)]).isPlaying == false, "main snapshot agrees: not playing")
+        let pausedOutputting = NowPlayingService.mergeSources(players: [spotifySnapshot(false)], resolved: [spotifyOutput], deviceOutputActive: false, icon: { _ in nil })
+        try check(pausedOutputting.map(\.isPlaying) == [true], "AppleScript paused but outputting is playing")
+        let pausedMain = NowPlayingService.snapshot(for: pausedOutputting.first, players: [spotifySnapshot(false)])
+        try check(pausedMain.isPlaying && pausedMain.title == "Song" && pausedMain.artist == "Band" && pausedMain.album == "LP"
+                  && pausedMain.artworkURL != nil, "main snapshot is playing and keeps AppleScript metadata")
+        let legacy = NowPlayingService.mergeSources(players: [spotifySnapshot(true)], resolved: nil, deviceOutputActive: true, icon: { _ in nil })
+        try check(legacy.map(\.isPlaying) == [true], "macOS 13 keeps the AppleScript playing state")
+        let legacyPaused = NowPlayingService.mergeSources(players: [spotifySnapshot(false)], resolved: nil, deviceOutputActive: false, icon: { _ in nil })
+        try check(legacyPaused.map(\.isPlaying) == [false], "macOS 13 keeps the AppleScript paused state")
 
         // Selection
         func source(_ id: String, playing: Bool) -> AudioSourceInfo {
@@ -69,7 +111,15 @@ struct AudioSourcesProbe {
         let ghosttyPlaying = source("com.mitchellh.ghostty", playing: true)
 
         try check(NowPlayingService.mainSource(selected: "com.mitchellh.ghostty", sources: [chromePlaying, ghosttyPlaying]) == "com.mitchellh.ghostty", "selected source wins")
-        try check(NowPlayingService.mainSource(selected: "com.spotify.client", sources: [chromePlaying, spotifyPaused]) == "com.spotify.client", "selected paused player wins")
+        try check(NowPlayingService.mainSource(selected: "com.spotify.client", sources: [source("com.google.Chrome", playing: false), spotifyPaused]) == "com.spotify.client", "selected paused player wins when nothing else plays")
+        try check(NowPlayingService.retainedSelection("com.spotify.client", sources: [spotifyPaused]) == "com.spotify.client", "selected paused player stays selected when nothing else plays")
+        try check(NowPlayingService.mainSource(selected: "com.spotify.client", sources: [chromePlaying, spotifyPaused]) == "com.google.Chrome", "selected paused player loses when another source plays")
+        try check(NowPlayingService.retainedSelection("com.spotify.client", sources: [chromePlaying, spotifyPaused]) == nil, "selection cleared when it stops and another source plays")
+        try check(NowPlayingService.retainedSelection("com.mitchellh.ghostty", sources: [chromePlaying, ghosttyPlaying]) == "com.mitchellh.ghostty", "playing selection holds")
+        try check(NowPlayingService.retainedSelection("com.spotify.client", selectionWasPlaying: false, sources: [chromePlaying, spotifyPaused]) == "com.spotify.client", "paused source picked by a click stays selected while another plays")
+        try check(NowPlayingService.mainSource(selected: "com.spotify.client", selectionWasPlaying: false, sources: [chromePlaying, spotifyPaused]) == "com.spotify.client", "paused source picked by a click is the main source")
+        try check(NowPlayingService.retainedSelection("com.gone.app", selectionWasPlaying: false, sources: [chromePlaying]) == nil, "clicked source that disappears is cleared")
+        try check(NowPlayingService.retainedSelection("com.gone.app", sources: [chromePlaying]) == nil, "stale selection cleared")
         try check(NowPlayingService.mainSource(selected: "com.gone.app", sources: [chromePlaying, ghosttyPlaying]) == "com.google.Chrome", "stale selection falls back to auto")
         try check(NowPlayingService.mainSource(selected: nil, sources: [chromePlaying, musicPlaying]) == "com.apple.Music", "playing AppleScript player first")
         try check(NowPlayingService.mainSource(selected: nil, sources: [spotifyPaused, ghosttyPlaying]) == "com.mitchellh.ghostty", "outputting source before paused player")

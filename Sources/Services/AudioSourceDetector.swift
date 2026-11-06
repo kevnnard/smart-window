@@ -17,6 +17,11 @@ enum AudioSourceDetector {
         let isPlaying: Bool
     }
 
+    /// Generic source for outputting WebKit processes (Safari, web views) that have no owning app.
+    static let webAudioID = "webkit-audio"
+    /// Generic source for any other outputting process that has no owning app.
+    static let systemAudioID = "system-audio"
+
     /// Maps helper bundle ids to their app: `com.google.Chrome.helper` -> `com.google.Chrome`.
     static func ownerBundleID(for bundleID: String) -> String {
         guard let range = bundleID.range(of: ".helper", options: .caseInsensitive) else { return bundleID }
@@ -25,7 +30,9 @@ enum AudioSourceDetector {
 
     /// Attributes audio processes to their owning regular apps and deduplicates by app.
     /// Order of resolution: the process itself, its helper-stripped bundle id, then its parent chain.
-    /// Processes that cannot be attributed to a running app are dropped instead of guessed.
+    /// Outputting processes that cannot be attributed are kept as a generic source, never guessed
+    /// as an app: WebKit processes become "Web content", anything else "System Audio".
+    /// Silent unattributable processes are dropped.
     static func resolveSources(
         audioProcesses: [AudioProcess],
         appForPID: (pid_t) -> (bundleID: String, name: String)?,
@@ -37,7 +44,8 @@ enum AudioSourceDetector {
         var resolved: [String: ResolvedSource] = [:]
         for process in audioProcesses {
             guard let owner = owningApp(of: process, appForPID: appForPID,
-                                        appForBundleID: appForBundleID, parentPID: parentPID),
+                                        appForBundleID: appForBundleID, parentPID: parentPID)
+                    ?? genericSource(of: process),
                   owner.bundleID != ownBundleID else { continue }
             if let existing = resolved[owner.bundleID] {
                 resolved[owner.bundleID] = ResolvedSource(bundleID: owner.bundleID, name: existing.name,
@@ -49,6 +57,12 @@ enum AudioSourceDetector {
             }
         }
         return order.compactMap { resolved[$0] }
+    }
+
+    private static func genericSource(of process: AudioProcess) -> (bundleID: String, name: String)? {
+        guard process.isOutputting else { return nil }
+        if process.bundleID?.hasPrefix("com.apple.WebKit") == true { return (webAudioID, "Web content") }
+        return (systemAudioID, "System Audio")
     }
 
     private static func owningApp(
