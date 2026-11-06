@@ -10,13 +10,27 @@ final class NotchController: NSObject, ObservableObject {
     /// Shared NowPlayingService so all notch windows show the same info
     private let nowPlayingService = NowPlayingService()
     private var isVisible = false
-    private var preferencesSubscription: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
     
     override init() {
         super.init()
-        preferencesSubscription = DisplayPreferences.shared.objectWillChange
+        DisplayPreferences.shared.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshVisibility() }
+            .store(in: &cancellables)
+
+        AppSettings.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.repositionAll()
+                self?.refreshVisibility()
+            }
+            .store(in: &cancellables)
+
+        nowPlayingService.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshVisibility() }
+            .store(in: &cancellables)
     }
     
     func show() {
@@ -36,10 +50,23 @@ final class NotchController: NSObject, ObservableObject {
     }
 
     private func refreshVisibility() {
+        let isMainOnly = !AppSettings.shared.notchShowOnAllDisplays
+        let mainDisplayID = NSScreen.main?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+
         for screen in NSScreen.screens {
             guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
                   let panel = panels[id] else { continue }
-            if isVisible && DisplayPreferences.shared.nowPlayingVisible(on: DisplayIdentity.key(for: screen)) {
+
+            if isMainOnly && id != mainDisplayID {
+                panel.orderOut(nil)
+                continue
+            }
+
+            let displayKey = DisplayIdentity.key(for: screen)
+            let displayPrefAllowed = DisplayPreferences.shared.nowPlayingVisible(on: displayKey)
+            let shouldShow = isVisible && displayPrefAllowed && (AppSettings.shared.notchAlwaysVisible || nowPlayingService.hasPlayer)
+
+            if shouldShow {
                 panel.orderFront(nil)
             } else {
                 panel.orderOut(nil)
@@ -157,9 +184,36 @@ final class NotchController: NSObject, ObservableObject {
             defer: false
         )
         panel.contentView = NSHostingView(
-            rootView: NotchView(nowPlaying: nowPlayingService, layout: layout, displayKey: DisplayIdentity.key(for: screen))
+            rootView: NotchView(
+                nowPlaying: nowPlayingService,
+                layout: layout,
+                screen: screen,
+                displayKey: DisplayIdentity.key(for: screen),
+                onExpandChange: { [weak self] expanded in
+                    self?.setExpanded(expanded, on: screen)
+                }
+            )
         )
         return panel
+    }
+
+    /// Dynamically expands or collapses the panel window frame to match the Dynamic Island state.
+    func setExpanded(_ expanded: Bool, on screen: NSScreen) {
+        guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+              let panel = panels[displayID] else { return }
+
+        let screenFrame = screen.frame
+        let layout = NotchLayout.forScreen(screen)
+        let targetWidth = expanded ? max(layout.contentWidth, 440) : layout.contentWidth
+        let targetHeight = expanded ? 180 + NotchLayout.bottomPadding : layout.panelSize.height
+        let x = screenFrame.minX + (screenFrame.width - targetWidth) / 2
+        let y = screenFrame.maxY - targetHeight
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.32
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(NSRect(x: x, y: y, width: targetWidth, height: targetHeight), display: true)
+        }
     }
 
     /// Positions a panel centered at the top of the given screen

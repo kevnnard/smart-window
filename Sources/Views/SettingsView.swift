@@ -235,6 +235,41 @@ private struct AppearancePane: View {
             }
 
             Section {
+                Toggle("Show on all displays", isOn: $settings.notchShowOnAllDisplays)
+                Toggle("Always show notch", isOn: $settings.notchAlwaysVisible)
+
+                LabeledContent("Width") {
+                    HStack(spacing: 10) {
+                        Slider(value: $settings.notchCustomWidth, in: AppSettings.notchMinWidth...AppSettings.notchMaxWidth, step: 2)
+                            .frame(width: 180)
+                        Text("\(Int(settings.notchCustomWidth)) pt")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+
+                LabeledContent("Height") {
+                    HStack(spacing: 10) {
+                        Slider(value: $settings.notchCustomHeight, in: AppSettings.notchMinHeight...AppSettings.notchMaxHeight, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(settings.notchCustomHeight)) pt")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Reset Dimensions") {
+                        settings.notchCustomWidth = AppSettings.notchDefaultWidth
+                        settings.notchCustomHeight = AppSettings.notchDefaultHeight
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+
                 Picker("Now Playing badge", selection: $settings.notchBadgeMatchesBar) {
                     Text("Black").tag(false)
                     Text("Match bar color").tag(true)
@@ -243,7 +278,7 @@ private struct AppearancePane: View {
             } header: {
                 Text("Notch")
             } footer: {
-                Text("Black blends with the physical notch on MacBook screens.")
+                Text("Custom width (180–440 pt) and height (30–46 pt) keep the notch proportional without overlapping macOS menus on 13\" screens.")
             }
 
             Section {
@@ -259,6 +294,16 @@ private struct AppearancePane: View {
 /// Small live preview of the bar and the notch badge with the current appearance settings.
 private struct BarPreview: View {
     @ObservedObject private var settings = AppSettings.shared
+
+    private var previewNotchWidth: CGFloat {
+        let ratio = CGFloat(settings.notchCustomWidth / AppSettings.notchDefaultWidth)
+        return min(220, max(100, 150 * ratio))
+    }
+
+    private var previewNotchHeight: CGFloat {
+        let ratio = CGFloat(settings.notchCustomHeight / AppSettings.notchDefaultHeight)
+        return min(30, max(18, 22 * ratio))
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -284,7 +329,7 @@ private struct BarPreview: View {
                     Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(BarTheme.badgeMusic)
                 }
                 .padding(.horizontal, 8)
-                .frame(width: 150, height: 22)
+                .frame(width: previewNotchWidth, height: previewNotchHeight)
                 .background(settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black)
                 .clipShape(BottomRoundedRectangle(radius: 7))
             }

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tactile Multi-Source Dock - SmartWindow Notch</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --card-bg: rgba(15, 23, 42, 0.95);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --text: #f9fafb;
+      --text-sub: #9ca3af;
+      --accent: #a855f7;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 15%, #2e1065 0%, #090514 65%, #020205 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .mockup-display {
+      width: 100%;
+      max-width: 1100px;
+      height: 640px;
+      background: #090514;
+      border-radius: 18px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .menu-bar {
+      height: 34px;
+      background: rgba(10, 8, 20, 0.7);
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+      z-index: 10;
+    }
+
+    /* Notch Center Anchor */
+    .notch-anchor {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Primary Notch Trigger */
+    .notch-pill {
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-top: none;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      height: 34px;
+      width: 310px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.7);
+      transition: all 0.25s ease;
+    }
+
+    .notch-pill:hover {
+      border-color: rgba(168, 85, 247, 0.5);
+      box-shadow: 0 8px 24px rgba(168, 85, 247, 0.25);
+    }
+
+    .pill-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill-active-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: #a855f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #fff;
+    }
+
+    .pill-title {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+
+    .pill-sources-count {
+      background: rgba(255,255,255,0.1);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      color: var(--text-sub);
+    }
+
+    /* Multi-Source Dropdown Panel */
+    .source-dock-panel {
+      width: 480px;
+      background: rgba(13, 11, 24, 0.95);
+      backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      margin-top: 8px;
+      padding: 16px;
+      box-shadow: 0 25px 50px -10px rgba(0,0,0,0.9), 0 0 30px rgba(168, 85, 247, 0.15);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      animation: dropIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes dropIn {
+      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 10px;
+    }
+
+    .panel-header h5 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Active Streams List */
+    .stream-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 10px 12px;
+      transition: background 0.2s;
+    }
+
+    .stream-item.active-stream {
+      background: rgba(168, 85, 247, 0.12);
+      border-color: rgba(168, 85, 247, 0.35);
+    }
+
+    .stream-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stream-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    .stream-icon.spotify { background: #1db954; }
+    .stream-icon.ghostty { background: #0284c7; }
+    .stream-icon.youtube { background: #ef4444; }
+
+    .stream-text h6 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .stream-text p {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    .stream-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mini-btn {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mini-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .slider-mini {
+      width: 70px;
+      accent-color: #a855f7;
+    }
+
+    /* Explanatory footer */
+    .dock-details {
+      margin-top: 24px;
+      max-width: 1100px;
+      width: 100%;
+      background: rgba(20, 15, 35, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="mockup-display">
+    <header class="menu-bar">
+      <div style="display: flex; gap: 14px; font-weight: 500;">
+        <span></span>
+        <span>SmartWindow</span>
+        <span>Audio Matrix</span>
+      </div>
+      <div style="font-size: 12px; color: var(--text-sub);">
+        <span>3 Audio Streams Detected</span>
+      </div>
+    </header>
+
+    <div class="notch-anchor">
+      <!-- Top Pill -->
+      <div id="dockPill" class="notch-pill" onclick="toggleDock()">
+        <div class="pill-left">
+          <div class="pill-active-icon">♫</div>
+          <div class="pill-title">Starboy · The Weeknd</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="pill-sources-count">3 Apps Audio</span>
+          <span style="font-size: 10px; opacity: 0.6;">▼</span>
+        </div>
+      </div>
+
+      <!-- Multi-source Floating Dock Panel -->
+      <div id="sourceDockPanel" class="source-dock-panel">
+        <div class="panel-header">
+          <h5>Active CoreAudio Outputs</h5>
+          <span style="font-size: 11px; color: #a855f7;">CoreAudio Routing Live</span>
+        </div>
+
+        <!-- Stream 1: Spotify -->
+        <div class="stream-item active-stream">
+          <div class="stream-info">
+            <div class="stream-icon spotify">♫</div>
+            <div class="stream-text">
+              <h6>Starboy (feat. Daft Punk)</h6>
+              <p>Spotify · High Quality Stream</p>
+            </div>
+          </div>
+          <div class="stream-controls">
+            <input type="range" class="slider-mini" value="85" title="App Volume">
+            <button class="mini-btn" title="Pause">❚❚</button>
+          </div>
+        </div>
+
+        <!-- Stream 2: Ghostty Terminal -->
+        <div class="stream-item">
+          <div class="stream-info">
+            <div class="stream-icon ghostty">❯_</div>
+            <div class="stream-text">
+              <h6>mpv radio / yt-dlp</h6>
+              <p>Ghostty CLI · Process PID 49122</p>
+            </div>
+          </div>
+          <div class="stream-controls">
+            <input type="range" class="slider-mini" value="60" title="App Volume">
+            <button class="mini-btn" title="Pause">❚❚</button>
+          </div>
+        </div>
+
+        <!-- Stream 3: Chrome YouTube -->
+        <div class="stream-item">
+          <div class="stream-info">
+            <div class="stream-icon youtube">▶</div>
+            <div class="stream-text">
+              <h6>Lex Fridman Podcast #412</h6>
+              <p>Google Chrome · Audible Tab</p>
+            </div>
+          </div>
+          <div class="stream-controls">
+            <input type="range" class="slider-mini" value="45" title="App Volume">
+            <button class="mini-btn" title="Play">▶</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dock-details">
+    <div>
+      <h4 style="font-size: 14px; margin-bottom: 4px;">Direction 3: Multi-Source Audio Matrix (Tactile Dock)</h4>
+      <p style="font-size: 12px; color: var(--text-sub);">Allows simultaneously managing multiple sound-producing applications (Spotify, Browser, Ghostty Terminal, Podcasts) with per-app volume and individual playback toggles.</p>
+    </div>
+    <div>
+      <button onclick="toggleDock()" style="padding: 8px 14px; background: #a855f7; border: none; color:#fff; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Toggle Panel</button>
+    </div>
+  </div>
+
+  <script>
+    let dockOpen = false;
+    function toggleDock() {
+      dockOpen = !dockOpen;
+      const panel = document.getElementById('sourceDockPanel');
+      panel.style.display = dockOpen ? 'flex' : 'none';
+    }
+  </script>
+</body>
+</html>

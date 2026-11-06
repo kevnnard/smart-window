@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Island Expansion - SmartWindow Notch</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --surface: rgba(18, 20, 29, 0.85);
+      --surface-border: rgba(255, 255, 255, 0.12);
+      --surface-hover: rgba(255, 255, 255, 0.08);
+      --text-main: #f5f5f7;
+      --text-muted: rgba(245, 245, 247, 0.6);
+      --text-dim: rgba(245, 245, 247, 0.4);
+      --accent-spotify: #1db954;
+      --accent-youtube: #ff0033;
+      --accent-terminal: #38bdf8;
+      --shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      --radius-pill: 20px;
+      --radius-card: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 20%, #1e2438 0%, #0c0e17 60%, #06070a 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+      overflow-x: hidden;
+    }
+
+    /* Simulated macOS Display Menu Bar */
+    .screen-mockup {
+      width: 100%;
+      max-width: 1100px;
+      height: 640px;
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+      border-radius: 18px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Wallpaper Ambient Elements */
+    .wallpaper-glow {
+      position: absolute;
+      width: 600px;
+      height: 300px;
+      background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.25), transparent 70%);
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    /* macOS Menu Bar */
+    .menu-bar {
+      height: 34px;
+      background: rgba(10, 12, 18, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 10;
+    }
+
+    .menu-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .apple-icon {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .menu-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Notch Anchor System */
+    .notch-anchor {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Hardware Notch Silhouette */
+    .hardware-cutout {
+      width: 180px;
+      height: 32px;
+      background: #000;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Interactive Island Pill */
+    .island-container {
+      background: #000;
+      border: 1px solid var(--surface-border);
+      border-top: none;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      position: relative;
+      z-index: 20;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* State: Compact Pill */
+    .island-container.compact {
+      width: 320px;
+      height: 34px;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+
+    .island-container.compact:hover {
+      border-color: rgba(255,255,255,0.25);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.9), 0 0 15px rgba(255,255,255,0.06);
+    }
+
+    /* State: Expanded Card */
+    .island-container.expanded {
+      width: 440px;
+      height: 180px;
+      border-radius: 24px;
+      margin-top: 6px;
+      border-top: 1px solid var(--surface-border);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+
+    /* Compact Pill View Details */
+    .compact-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .source-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 10px;
+    }
+
+    .source-chip.spotify { background: var(--accent-spotify); color: #000; }
+    .source-chip.youtube { background: var(--accent-youtube); color: #fff; }
+    .source-chip.ghostty { background: #18181b; color: var(--accent-terminal); border: 1px solid rgba(56,189,248,0.4); }
+
+    .compact-title {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+      color: #fff;
+    }
+
+    .compact-source-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .compact-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    /* Live Equalizer Bars */
+    .eq-wave {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 14px;
+    }
+
+    .eq-bar {
+      width: 2.5px;
+      background: var(--accent-spotify);
+      border-radius: 1px;
+      animation: bounce 0.8s ease-in-out infinite alternate;
+    }
+
+    .eq-bar:nth-child(1) { height: 6px; animation-delay: 0.1s; }
+    .eq-bar:nth-child(2) { height: 12px; animation-delay: 0.3s; }
+    .eq-bar:nth-child(3) { height: 8px; animation-delay: 0.2s; }
+    .eq-bar:nth-child(4) { height: 14px; animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0% { height: 3px; }
+      100% { height: 14px; }
+    }
+
+    /* Expanded Details View */
+    /* Fixed grid: the badge and every pill keep the same box whatever the label length. */
+    .expanded-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .source-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      max-width: 160px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.08);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .source-badge-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .app-selector-pills {
+      display: grid;
+      grid-template-columns: repeat(3, var(--pill-width, 64px));
+      gap: 6px;
+    }
+
+    .app-pill {
+      width: 100%;
+      height: 20px;
+      padding: 0 6px;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 18px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text-muted);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    .app-pill:focus-visible {
+      outline: 2px solid rgba(255,255,255,0.6);
+      outline-offset: 1px;
+    }
+
+    /* Narrow viewports: the card shrinks and the pills share the space evenly. */
+    @media (max-width: 560px) {
+      .island-container.expanded { width: calc(100vw - 48px); }
+      .app-selector-pills { grid-template-columns: repeat(3, minmax(0, 56px)); }
+    }
+
+    .app-pill.active {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    .expanded-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 8px 0;
+    }
+
+    .artwork-large {
+      width: 58px;
+      height: 58px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2e1065, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    .track-meta {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .meta-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .meta-artist {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .meta-tag {
+      font-size: 10px;
+      display: inline-block;
+      margin-top: 4px;
+      color: var(--accent-spotify);
+      font-weight: 600;
+    }
+
+    /* Controls Bar */
+    .expanded-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .transport-btns {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      transition: background 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--surface-hover);
+    }
+
+    .icon-btn.primary {
+      width: 32px;
+      height: 32px;
+      background: #fff;
+      color: #000;
+    }
+
+    .icon-btn.primary:hover {
+      transform: scale(1.05);
+      background: #e2e8f0;
+    }
+
+    .timeline-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      max-width: 170px;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .progress-fill {
+      width: 42%;
+      height: 100%;
+      background: var(--text-main);
+      border-radius: 2px;
+    }
+
+    /* Instruction callout below screen */
+    .controls-panel {
+      margin-top: 24px;
+      max-width: 1100px;
+      width: 100%;
+      background: rgba(18, 20, 29, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .controls-text h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #fff;
+    }
+
+    .controls-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .switcher-btns {
+      display: flex;
+      gap: 10px;
+    }
+
+    .demo-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-btn:hover {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="screen-mockup">
+    <div class="wallpaper-glow"></div>
+
+    <!-- macOS Menu Bar -->
+    <header class="menu-bar">
+      <div class="menu-left">
+        <span class="apple-icon"></span>
+        <span>SmartWindow</span>
+        <span>File</span>
+        <span>Edit</span>
+        <span>View</span>
+        <span>Displays</span>
+        <span>Help</span>
+      </div>
+      <div class="menu-right">
+        <span>RAM 42%</span>
+        <span>CPU 14%</span>
+        <span>98%</span>
+        <span>Tue 10:45 AM</span>
+      </div>
+    </header>
+
+    <!-- Center Notch & Dynamic Island -->
+    <div class="notch-anchor">
+      <div class="hardware-cutout"></div>
+
+      <!-- Island Container (compact by default, clicks to expand) -->
+      <div id="notchIsland" class="island-container compact" onclick="toggleExpand()">
+        <!-- Compact Pill Template -->
+        <div id="compactView" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div class="compact-left">
+            <div id="compactChip" class="source-chip spotify">♫</div>
+            <div>
+              <div id="compactTitle" class="compact-title">Starboy · The Weeknd</div>
+            </div>
+          </div>
+          <div class="compact-right">
+            <span id="compactBadge" class="compact-source-label">Spotify</span>
+            <div class="eq-wave">
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expanded Card Template -->
+        <div id="expandedView" style="display: none; width: 100%; height: 100%; flex-direction: column; justify-content: space-between;">
+          <div class="expanded-header">
+            <div class="source-badge">
+              <span id="expandedIcon">🟢</span>
+              <span id="expandedSourceLabel" class="source-badge-label">Spotify Audio Stream</span>
+            </div>
+            <div class="app-selector-pills">
+              <button class="app-pill active" data-source="spotify" title="Spotify" onclick="switchSource(event, 'spotify')">Spotify</button>
+              <button class="app-pill" data-source="youtube" title="YouTube / Browser" onclick="switchSource(event, 'youtube')">Browser</button>
+              <button class="app-pill" data-source="ghostty" title="Ghostty CLI" onclick="switchSource(event, 'ghostty')">Ghostty</button>
+            </div>
+          </div>
+
+          <div class="expanded-content">
+            <div id="artworkBox" class="artwork-large">
+              <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+            </div>
+            <div class="track-meta">
+              <div id="expandedTitle" class="meta-title">Starboy (feat. Daft Punk)</div>
+              <div id="expandedSubtitle" class="meta-artist">The Weeknd — Starboy Deluxe</div>
+              <div id="expandedMetaTag" class="meta-tag">Playing on MacBook Speakers · 44.1kHz</div>
+            </div>
+          </div>
+
+          <div class="expanded-controls">
+            <div class="transport-btns">
+              <button class="icon-btn" title="Previous Track">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+              </button>
+              <button class="icon-btn primary" title="Play/Pause">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              </button>
+              <button class="icon-btn" title="Next Track">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+            </div>
+
+            <div class="timeline-container">
+              <span>1:24</span>
+              <div class="progress-track"><div class="progress-fill"></div></div>
+              <span>3:50</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-panel">
+    <div class="controls-text">
+      <h4>Direction 1: Dynamic Island Card (Hover & Click Interaction)</h4>
+      <p>Click the black notch pill at the top of the mockup to toggle between the compact bar pill and the expanded floating card. Switch active audio sources using the pills.</p>
+    </div>
+    <div class="switcher-btns">
+      <button class="demo-btn" onclick="toggleExpand()">Toggle Expand State</button>
+      <button class="demo-btn" onclick="simulateSource('youtube')">Simulate YouTube</button>
+      <button class="demo-btn" onclick="simulateSource('ghostty')">Simulate Ghostty</button>
+    </div>
+  </div>
+
+  <script>
+    let isExpanded = false;
+    let currentSource = 'spotify';
+
+    const sources = {
+      spotify: {
+        chip: '♫',
+        chipClass: 'source-chip spotify',
+        badge: 'Spotify',
+        title: 'Starboy · The Weeknd',
+        expandedTitle: 'Starboy (feat. Daft Punk)',
+        expandedSubtitle: 'The Weeknd — Starboy Deluxe',
+        expandedMetaTag: 'Playing via Spotify · 44.1 kHz 320kbps',
+        icon: '🟢',
+        eqColor: '#1db954',
+        artBg: 'linear-gradient(135deg, #1db954, #121212)'
+      },
+      youtube: {
+        chip: '▶',
+        chipClass: 'source-chip youtube',
+        badge: 'Chrome / YT',
+        title: 'Lex Fridman #412 — Yann LeCun',
+        expandedTitle: 'Lex Fridman Podcast #412 — Deep Learning',
+        expandedSubtitle: 'Google Chrome · YouTube Tab #4',
+        expandedMetaTag: 'Safari/Chrome Web Audio Output',
+        icon: '🔴',
+        eqColor: '#ff0033',
+        artBg: 'linear-gradient(135deg, #ef4444, #991b1b)'
+      },
+      ghostty: {
+        chip: '❯',
+        chipClass: 'source-chip ghostty',
+        badge: 'Ghostty CLI',
+        title: 'cava / mpv radio stream',
+        expandedTitle: 'Lofi Chillhop 24/7 Stream',
+        expandedSubtitle: 'Ghostty Terminal PID 49122 (mpv core)',
+        expandedMetaTag: 'CoreAudio Terminal Stream Active',
+        icon: '🔵',
+        eqColor: '#38bdf8',
+        artBg: 'linear-gradient(135deg, #0284c7, #0f172a)'
+      }
+    };
+
+    function toggleExpand() {
+      isExpanded = !isExpanded;
+      const island = document.getElementById('notchIsland');
+      const compactView = document.getElementById('compactView');
+      const expandedView = document.getElementById('expandedView');
+
+      if (isExpanded) {
+        island.classList.remove('compact');
+        island.classList.add('expanded');
+        compactView.style.display = 'none';
+        expandedView.style.display = 'flex';
+      } else {
+        island.classList.remove('expanded');
+        island.classList.add('compact');
+        compactView.style.display = 'flex';
+        expandedView.style.display = 'none';
+      }
+    }
+
+    function switchSource(event, key) {
+      if (event) event.stopPropagation();
+      currentSource = key;
+      const s = sources[key];
+
+      document.getElementById('compactChip').className = s.chipClass;
+      document.getElementById('compactChip').innerText = s.chip;
+      document.getElementById('compactTitle').innerText = s.title;
+      document.getElementById('compactBadge').innerText = s.badge;
+
+      document.getElementById('expandedIcon').innerText = s.icon;
+      document.getElementById('expandedSourceLabel').innerText = s.badge + ' Audio Stream';
+      document.getElementById('expandedTitle').innerText = s.expandedTitle;
+      document.getElementById('expandedSubtitle').innerText = s.expandedSubtitle;
+      document.getElementById('expandedMetaTag').innerText = s.expandedMetaTag;
+      document.getElementById('artworkBox').style.background = s.artBg;
+
+      document.querySelectorAll('.eq-bar').forEach(bar => bar.style.background = s.eqColor);
+
+      document.querySelectorAll('.app-pill').forEach(pill => {
+        pill.classList.toggle('active', pill.dataset.source === key);
+      });
+    }
+
+    function simulateSource(key) {
+      switchSource(null, key);
+      if (!isExpanded) toggleExpand();
+    }
+  </script>
+</body>
+</html>

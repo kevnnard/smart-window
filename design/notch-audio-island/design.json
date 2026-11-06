@@ -1,0 +1,27 @@
+{
+  "title": "Notch Audio Island & Multi-Media Player",
+  "brief": "Interactive media pill and expanded detail HUD for macOS notch, supporting multi-app audio detection (Spotify, Web browsers, Ghostty terminal, etc.) with hover and click interactions.",
+  "artboards": [
+    {
+      "file": "01-dynamic-island.html",
+      "title": "Dynamic Island Card",
+      "tradeoff": "Rich visual feedback, album artwork, and full transport controls; higher vertical footprint when expanded.",
+      "width": 1100,
+      "height": 780
+    },
+    {
+      "file": "02-integrated-hud.html",
+      "title": "Integrated Winged HUD",
+      "tradeoff": "Minimal vertical footprint hugging the menu bar; less room for large album art.",
+      "width": 1100,
+      "height": 760
+    },
+    {
+      "file": "03-tactile-dock.html",
+      "title": "Multi-Source Audio Matrix",
+      "tradeoff": "Direct control and volume mixing across multiple concurrent audio apps (Spotify, Terminal, Browser); denser UI.",
+      "width": 1100,
+      "height": 780
+    }
+  ]
+}

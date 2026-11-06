@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrated Winged HUD - SmartWindow Notch</title>
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bar-bg: rgba(14, 17, 25, 0.75);
+      --hud-bg: #000000;
+      --border-subtle: rgba(255, 255, 255, 0.12);
+      --accent-active: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 10%, #172554 0%, #090d16 70%, #030712 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .mockup-frame {
+      width: 100%;
+      max-width: 1100px;
+      height: 620px;
+      background: linear-gradient(145deg, #1e1b4b, #0f172a, #030712);
+      border-radius: 18px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .menu-bar {
+      height: 34px;
+      background: var(--bar-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      z-index: 10;
+      position: relative;
+    }
+
+    .menu-items {
+      display: flex;
+      gap: 16px;
+      font-weight: 500;
+    }
+
+    /* Notch Winged HUD */
+    .notch-hud {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000;
+      border: 1px solid var(--border-subtle);
+      border-top: none;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      display: flex;
+      align-items: center;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 50;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+
+    /* Base Compact Wing Mode */
+    .notch-hud.compact {
+      width: 300px;
+      height: 34px;
+      padding: 0 14px;
+      justify-content: space-between;
+    }
+
+    /* Hover Peek */
+    .notch-hud.compact:hover {
+      width: 360px;
+      border-color: rgba(255,255,255,0.25);
+    }
+
+    /* Expanded Wing HUD Mode */
+    .notch-hud.expanded {
+      width: 580px;
+      height: 48px;
+      padding: 0 18px;
+      justify-content: space-between;
+      border-bottom-left-radius: 18px;
+      border-bottom-right-radius: 18px;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.85), 0 0 20px rgba(56, 189, 248, 0.1);
+    }
+
+    /* Left Section: App Badge & Title */
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .app-icon-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .app-icon-pill.ghostty { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .app-icon-pill.chrome { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .app-icon-pill.spotify { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+
+    .track-marquee {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+
+    /* Center Section (in expanded mode: mini scrubber) */
+    .hud-center {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      padding: 0 14px;
+    }
+
+    .notch-hud.expanded .hud-center {
+      display: flex;
+    }
+
+    .scrubber-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      position: relative;
+    }
+
+    .scrubber-fill {
+      width: 58%;
+      height: 100%;
+      background: var(--accent-active);
+      border-radius: 2px;
+    }
+
+    .time-stamp {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Right Section: Mini Transport & Status */
+    .hud-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .hud-btn {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .hud-btn:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .volume-pill {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--text-muted);
+      background: rgba(255,255,255,0.06);
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .notch-hud.expanded .volume-pill {
+      display: flex;
+    }
+
+    .audio-meter {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 12px;
+    }
+
+    .meter-bar {
+      width: 2px;
+      background: var(--accent-active);
+      border-radius: 1px;
+      animation: pulseBar 0.7s infinite alternate;
+    }
+
+    .meter-bar:nth-child(1) { height: 4px; }
+    .meter-bar:nth-child(2) { height: 10px; animation-delay: 0.15s; }
+    .meter-bar:nth-child(3) { height: 7px; animation-delay: 0.3s; }
+
+    @keyframes pulseBar {
+      0% { height: 3px; }
+      100% { height: 12px; }
+    }
+
+    /* Info bar below */
+    .description-card {
+      margin-top: 24px;
+      max-width: 1100px;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .description-card h4 {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .description-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="mockup-frame">
+    <!-- Menu Bar -->
+    <header class="menu-bar">
+      <div class="menu-items">
+        <span></span>
+        <span>SmartWindow</span>
+        <span>Audio HUD</span>
+        <span>Windows</span>
+      </div>
+      <div class="menu-items" style="color: var(--text-muted); font-size: 12px;">
+        <span>CoreAudio Master 72%</span>
+        <span>10:45 AM</span>
+      </div>
+    </header>
+
+    <!-- Winged HUD attached to top -->
+    <div id="wingedHud" class="notch-hud compact" onclick="toggleHud()">
+      <div class="hud-left">
+        <div id="appPill" class="app-icon-pill ghostty">
+          <span>❯_</span>
+          <span id="appLabel">Ghostty</span>
+        </div>
+        <div id="hudTitle" class="track-marquee">ffmpeg radio stream · 128kbps</div>
+      </div>
+
+      <div class="hud-center">
+        <span class="time-stamp">18:42</span>
+        <div class="scrubber-track"><div class="scrubber-fill"></div></div>
+        <span class="time-stamp">LIVE</span>
+      </div>
+
+      <div class="hud-right">
+        <div class="volume-pill">VOL 65%</div>
+        <button class="hud-btn" title="Toggle Playback">
+          <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <div class="audio-meter">
+          <div class="meter-bar"></div>
+          <div class="meter-bar"></div>
+          <div class="meter-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="description-card">
+    <div>
+      <h4>Direction 2: Integrated Winged HUD (Horizontal Ribbon)</h4>
+      <p>Stays closely hugging the top menu bar rather than expanding into a deep card. Perfect for smaller 13" laptop screens to preserve maximum desktop workspace.</p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button onclick="toggleHud()" style="padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color:#fff; border-radius:6px; cursor:pointer;">Toggle HUD Expansion</button>
+      <button onclick="setHudApp('spotify')" style="padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color:#fff; border-radius:6px; cursor:pointer;">Spotify</button>
+      <button onclick="setHudApp('chrome')" style="padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color:#fff; border-radius:6px; cursor:pointer;">Chrome Video</button>
+    </div>
+  </div>
+
+  <script>
+    let expanded = false;
+    function toggleHud() {
+      expanded = !expanded;
+      const el = document.getElementById('wingedHud');
+      if (expanded) {
+        el.classList.remove('compact');
+        el.classList.add('expanded');
+      } else {
+        el.classList.remove('expanded');
+        el.classList.add('compact');
+      }
+    }
+
+    function setHudApp(app) {
+      const pill = document.getElementById('appPill');
+      const label = document.getElementById('appLabel');
+      const title = document.getElementById('hudTitle');
+
+      if (app === 'spotify') {
+        pill.className = 'app-icon-pill spotify';
+        label.innerText = 'Spotify';
+        title.innerText = 'Billie Eilish — Birds of a Feather';
+      } else if (app === 'chrome') {
+        pill.className = 'app-icon-pill chrome';
+        label.innerText = 'Chrome';
+        title.innerText = 'Twitch · ThePrimeagen Live Coding Stream';
+      } else {
+        pill.className = 'app-icon-pill ghostty';
+        label.innerText = 'Ghostty';
+        title.innerText = 'ffmpeg radio stream · 128kbps';
+      }
+    }
+  </script>
+</body>
+</html>

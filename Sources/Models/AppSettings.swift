@@ -20,6 +20,24 @@ final class AppSettings: ObservableObject {
     /// When true the notch badge uses the bar color; otherwise pure black.
     @AppStorage("notchBadgeMatchesBar") var notchBadgeMatchesBar: Bool = false
 
+    // MARK: Notch Appearance & Multi-display
+
+    static let notchMinWidth: Double = 180.0
+    static let notchMaxWidth: Double = 440.0
+    static let notchMinHeight: Double = 30.0
+    static let notchMaxHeight: Double = 46.0
+    static let notchDefaultWidth: Double = 280.0
+    static let notchDefaultHeight: Double = 34.0
+
+    /// Whether the notch appears on all connected monitors or only the primary screen.
+    @AppStorage("notchShowOnAllDisplays") var notchShowOnAllDisplays: Bool = true
+    /// Whether the notch stays visible even when no media/player is active.
+    @AppStorage("notchAlwaysVisible") var notchAlwaysVisible: Bool = true
+    /// User-customized width of the notch (points).
+    @AppStorage("notchCustomWidth") var notchCustomWidth: Double = 280.0
+    /// User-customized height of the notch (points).
+    @AppStorage("notchCustomHeight") var notchCustomHeight: Double = 34.0
+
     /// Every widget the bar knows how to render, in default order.
     static let knownWidgets: [String] = ["RAM", "CPU", "Temperature", "GPU", "MIC", "VOL", "Tailscale", "Keyboard", "Battery"]
 

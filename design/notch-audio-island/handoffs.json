@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-dynamic-island.html",
+  "handoffs": {
+    "01-dynamic-island.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-06T21:43:53.819Z",
+      "startedAt": "2026-11-06T21:44:00.053Z",
+      "implementedAt": "2026-11-06T21:54:23.075Z",
+      "note": "SwiftUI NotchView: compact pill + expanded card on click, fixed-size source pills, CoreAudio fallback detection. Native macOS app, no loopback preview. Build and probes pass; not visually verified on device."
+    }
+  }
+}

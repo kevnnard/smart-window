@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "comments": [
+    {
+      "id": "sb6s8ypl",
+      "file": "01-dynamic-island.html",
+      "selector": "#expandedView > div:nth-of-type(1)",
+      "excerpt": "🟢 Spotify Audio Stream Spotify YouTube / Browser Ghostty CLI",
+      "comment": "manten responsive y mismos tamanos para los badges pasa actaual que vambia de mtamo y distoriciona los demas debrian ser el mismo ancho alto etc",
+      "createdAt": "2026-11-06T21:45:16.952Z",
+      "status": "resolved",
+      "sentAt": "2026-11-06T21:45:16.962Z",
+      "resolvedAt": "2026-11-06T21:53:14.034Z"
+    }
+  ]
+}
