@@ -12,6 +12,7 @@ enum MediaRemoteAdapterLocator {
     /// 1. `<bundle Resources>/MediaRemoteAdapter/`
     /// 2. `<executable dir>/../mediaremote-adapter/` (`.build/debug/SmartWindow`)
     /// 3. `<executable dir>/../../mediaremote-adapter/` (`.build/<triple>/debug/SmartWindow`)
+    /// 4. `<executable dir>/../../../mediaremote-adapter/` (`.build/out/Products/Debug/SmartWindow`)
     static func locate(
         bundleResourceURL: URL?,
         executableURL: URL?,
@@ -25,6 +26,7 @@ enum MediaRemoteAdapterLocator {
             let dir = executable.deletingLastPathComponent()
             candidates.append(dir.appendingPathComponent("../mediaremote-adapter", isDirectory: true))
             candidates.append(dir.appendingPathComponent("../../mediaremote-adapter", isDirectory: true))
+            candidates.append(dir.appendingPathComponent("../../../mediaremote-adapter", isDirectory: true))
         }
         for candidate in candidates {
             let dir = candidate.absoluteURL.standardizedFileURL

@@ -83,6 +83,28 @@ struct MediaRemoteAdapterClientProbe {
         try check(Client.sendArguments(script: script, framework: framework, command: .togglePlayPause)
                   == ["/A/mediaremote-adapter.pl", "/A/MediaRemoteAdapter.framework", "send", "2"], "send arguments")
         try check(Client.AdapterError.exit(3).localizedDescription == "Could not reach the Now Playing service (exit 3).", "send failure message")
+        try check(Client.getArguments(script: script, framework: framework)
+                  == ["/A/mediaremote-adapter.pl", "/A/MediaRemoteAdapter.framework", "get", "--no-artwork"], "get arguments")
+
+        // Send is bound to the expected owner, checked with a fresh `get`
+        let chrome = NowPlayingInfo(bundleIdentifier: "com.google.Chrome.helper",
+                                    parentApplicationBundleIdentifier: "com.google.Chrome", title: "Video")
+        let musicOwn = NowPlayingInfo(bundleIdentifier: "com.apple.Music", title: "Song")
+        try check(Client.shouldSend(expectedOwner: "com.apple.Music", currentInfo: musicOwn), "owner matches through bundle id")
+        try check(Client.shouldSend(expectedOwner: "com.google.Chrome", currentInfo: chrome), "owner matches through parent app")
+        try check(!Client.shouldSend(expectedOwner: "com.google.Chrome.helper", currentInfo: chrome), "helper id is not the owner")
+        try check(!Client.shouldSend(expectedOwner: "com.apple.Music", currentInfo: chrome), "another app is now playing")
+        try check(!Client.shouldSend(expectedOwner: "com.apple.Music", currentInfo: nil), "nothing is playing")
+        try check(Client.AdapterError.notNowPlaying(appName: "Apple Music").localizedDescription
+                  == "Apple Music is no longer the Mac's Now Playing app. Nothing was sent.", "owner changed message")
+
+        // `get` prints a bare payload or null
+        let getOutput = line(#"{"bundleIdentifier":"com.google.Chrome.helper","parentApplicationBundleIdentifier":"com.google.Chrome","title":"Video","playing":true}"# + "\n")
+        try check((try? Client.getOutputInfo(getOutput))??.ownerBundleIdentifier == "com.google.Chrome", "get payload parsed")
+        try check((try? Client.getOutputInfo(line("null\n"))) == .some(nil), "get null means nothing playing")
+        try check((try? Client.getOutputInfo(line("perl: warning"))) == nil, "unreadable get output is an error")
+        try check(Client.AdapterError.invalidOutput.localizedDescription
+                  == "Could not read the Now Playing service's answer. Nothing was sent.", "invalid output message")
 
         // Backoff
         try check((0..<6).map(Client.backoffDelay(attempt:)) == [2, 5, 15, 15, 15, 15], "backoff schedule capped")

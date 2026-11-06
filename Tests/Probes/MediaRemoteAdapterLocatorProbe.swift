@@ -28,7 +28,8 @@ struct MediaRemoteAdapterLocatorProbe {
         try check(appBundle?.script.path == "\(bundled)/mediaremote-adapter.pl", "app bundle script wins")
         try check(appBundle?.framework.path == "\(bundled)/MediaRemoteAdapter.framework", "app bundle framework wins")
 
-        for executable in [".build/debug/SmartWindow", ".build/arm64-apple-macosx/debug/SmartWindow"] {
+        for executable in [".build/debug/SmartWindow", ".build/arm64-apple-macosx/debug/SmartWindow",
+                           ".build/out/Products/Debug/SmartWindow"] {
             let debug = MediaRemoteAdapterLocator.locate(
                 bundleResourceURL: URL(fileURLWithPath: "\(root)/.build/debug"),
                 executableURL: URL(fileURLWithPath: "\(root)/\(executable)"),

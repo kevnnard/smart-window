@@ -106,8 +106,11 @@ struct AudioSourcesProbe {
         try check(Service.retainedSelection("com.gone.app", selectionWasPlaying: false, sources: [chromePlaying]) == nil, "vanished selection cleared")
 
         // Routing
-        try check(Service.route(for: np, nowPlayingID: np) == .adapter, "Now Playing app uses the adapter")
-        try check(Service.route(for: "com.spotify.client", nowPlayingID: "com.spotify.client") == .adapter, "Now Playing Spotify uses the adapter")
+        try check(Service.route(for: np, nowPlayingID: np) == .adapter(expectedOwner: np), "Now Playing app uses the adapter, bound to its owner")
+        try check(Service.route(for: "com.spotify.client", nowPlayingID: "com.spotify.client")
+                  == .adapter(expectedOwner: "com.spotify.client"), "Now Playing Spotify uses the adapter, bound to Spotify")
+        try check(Service.route(for: np, nowPlayingID: chromeSession.ownerBundleIdentifier) == .adapter(expectedOwner: "com.google.Chrome"),
+                  "expected owner is the parent app, not the helper")
         try check(Service.route(for: "com.spotify.client", nowPlayingID: np) == .appleScript("com.spotify.client"), "Spotify not Now Playing uses AppleScript")
         try check(Service.route(for: "com.apple.Music", nowPlayingID: nil) == .appleScript("com.apple.Music"), "Music without adapter uses AppleScript")
         guard case .unavailable(let reason) = Service.route(for: "com.example.Radio", nowPlayingID: np) else {

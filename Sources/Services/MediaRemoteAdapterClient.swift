@@ -51,9 +51,15 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     enum AdapterError: LocalizedError, Equatable {
         case unavailable, exit(Int32), timeout, launch(String)
+        /// The fresh `get` before `send` reported another app, or nothing, as Now Playing.
+        case notNowPlaying(appName: String)
+        /// The `get` before `send` printed something that is not a payload or null.
+        case invalidOutput
         var errorDescription: String? {
             switch self {
             case .unavailable: return "The Now Playing service is not available."
+            case .notNowPlaying(let appName): return "\(appName) is no longer the Mac's Now Playing app. Nothing was sent."
+            case .invalidOutput: return "Could not read the Now Playing service's answer. Nothing was sent."
             case .exit(let status): return "Could not reach the Now Playing service (exit \(status))."
             case .timeout: return "Could not reach the Now Playing service (timed out)."
             case .launch(let message): return "Could not reach the Now Playing service (\(message))."
@@ -65,6 +71,12 @@ final class MediaRemoteAdapterClient: ObservableObject {
     /// Time the stream has to print its first line before it is considered unhealthy.
     nonisolated static let startupWindow: TimeInterval = 3
     nonisolated static let sendTimeout: TimeInterval = 5
+    /// The adapter's own `get` gives up after 2 s.
+    nonisolated static let ownerCheckTimeout: TimeInterval = 3
+    /// Grace period after `terminate()` before a command process is killed.
+    nonisolated static let killGrace: TimeInterval = 1
+    /// Running `get`/`send` processes, terminated by `stop()` and on app termination.
+    nonisolated static let commandProcesses = CommandProcesses()
 
     private var process: Process?
     /// Incremented on every start/stop so callbacks from an older process are ignored.
@@ -77,6 +89,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     deinit {
         process?.terminate()
+        Self.commandProcesses.terminateAll()
     }
 
     // MARK: Lifecycle
@@ -93,13 +106,14 @@ final class MediaRemoteAdapterClient: ObservableObject {
         launch()
     }
 
-    /// Terminates the stream and cancels pending restarts.
+    /// Terminates the stream and any running command, and cancels pending restarts.
     func stop() {
         started = false
         generation += 1
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
         terminationObserver = nil
         terminateProcess()
+        Self.commandProcesses.terminateAll()
         markUnavailable()
     }
 
@@ -193,41 +207,102 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     // MARK: Commands
 
-    /// Sends a command to the Now Playing app in a separate short-lived process.
+    /// Sends a command to the Now Playing app only while it is still `expectedOwner`.
+    /// The adapter cannot target an app, so a fresh `get` first confirms the owner the user saw;
+    /// when another app (or nothing) is Now Playing, nothing is sent. A window of a few
+    /// milliseconds remains between that `get` and the `send`, which the adapter cannot close.
     /// `completion` runs on the main queue with nil on exit status 0.
-    func send(_ action: NowPlayingService.TransportAction, completion: @escaping (AdapterError?) -> Void) {
+    func send(_ action: NowPlayingService.TransportAction, expectedOwner: String, appName: String,
+              completion: @escaping (AdapterError?) -> Void) {
         guard let adapter = MediaRemoteAdapterLocator.current() else {
             completion(.unavailable)
             return
         }
+        let check = Self.getArguments(script: adapter.script, framework: adapter.framework)
         let arguments = Self.sendArguments(script: adapter.script, framework: adapter.framework,
                                            command: Self.command(for: action))
         DispatchQueue.global(qos: .userInitiated).async {
-            let error = Self.run(arguments: arguments, timeout: Self.sendTimeout)
+            let error = Self.sendIfOwner(expectedOwner, appName: appName, check: check, send: arguments)
             DispatchQueue.main.async { completion(error) }
         }
     }
 
-    /// Runs perl with the arguments and waits up to `timeout`; nil on exit status 0.
-    nonisolated static func run(arguments: [String], timeout: TimeInterval) -> AdapterError? {
+    private nonisolated static func sendIfOwner(_ expectedOwner: String, appName: String,
+                                                check: [String], send: [String]) -> AdapterError? {
+        let epoch = commandProcesses.epoch
+        let current: NowPlayingInfo?
+        switch run(arguments: check, timeout: ownerCheckTimeout, captureOutput: true) {
+        case .failure(let error): return error
+        case .success(let output):
+            do { current = try getOutputInfo(output) } catch { return .invalidOutput }
+        }
+        guard shouldSend(expectedOwner: expectedOwner, currentInfo: current) else {
+            return .notNowPlaying(appName: appName)
+        }
+        // `stop()` ran during the check: the client is shutting down.
+        guard commandProcesses.epoch == epoch else { return .unavailable }
+        if case .failure(let error) = run(arguments: send, timeout: sendTimeout, captureOutput: false) { return error }
+        return nil
+    }
+
+    /// Runs perl with the arguments and waits up to `timeout`. Succeeds with stdout (empty unless
+    /// `captureOutput`) on exit status 0. On timeout the process is terminated, then killed if it
+    /// is still running after `killGrace`. The process is tracked while it runs so `stop()` ends it.
+    nonisolated static func run(arguments: [String], timeout: TimeInterval,
+                                captureOutput: Bool) -> Result<Data, AdapterError> {
         let process = Process()
         process.executableURL = perlURL
         process.arguments = arguments
-        process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
+        let output = captureOutput ? Pipe() : nil
+        let collected = LockedData()
+        let reachedEnd = DispatchSemaphore(value: 0)
+        if let output {
+            process.standardOutput = output
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    reachedEnd.signal()
+                } else {
+                    collected.append(chunk)
+                }
+            }
+        } else {
+            process.standardOutput = FileHandle.nullDevice
+        }
         let finished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in finished.signal() }
+
+        func clearPipe() {
+            guard let output else { return }
+            output.fileHandleForReading.readabilityHandler = nil
+            try? output.fileHandleForReading.close()
+        }
+        defer {
+            commandProcesses.remove(process)
+            clearPipe()
+        }
+
         do {
             try process.run()
         } catch {
-            return .launch(error.localizedDescription)
+            return .failure(.launch(error.localizedDescription))
         }
+        commandProcesses.insert(process)
+
         guard finished.wait(timeout: .now() + timeout) == .success else {
             process.terminate()
-            return .timeout
+            if finished.wait(timeout: .now() + killGrace) != .success, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            return .failure(.timeout)
         }
-        return process.terminationStatus == 0 ? nil : .exit(process.terminationStatus)
+        guard process.terminationStatus == 0 else { return .failure(.exit(process.terminationStatus)) }
+        // The exit can be observed before the last chunk is read.
+        if output != nil { _ = reachedEnd.wait(timeout: .now() + killGrace) }
+        return .success(collected.data)
     }
 
     // MARK: Pure helpers
@@ -250,6 +325,28 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     nonisolated static func sendArguments(script: URL, framework: URL, command: Command) -> [String] {
         [script.path, framework.path, "send", String(command.rawValue)]
+    }
+
+    /// One-shot read used to confirm the Now Playing owner before `send`; artwork is not needed.
+    nonisolated static func getArguments(script: URL, framework: URL) -> [String] {
+        [script.path, framework.path, "get", "--no-artwork"]
+    }
+
+    /// A command may go out only while the app the user saw still owns the Now Playing session.
+    nonisolated static func shouldSend(expectedOwner: String, currentInfo: NowPlayingInfo?) -> Bool {
+        guard let owner = currentInfo?.ownerBundleIdentifier else { return false }
+        return owner == expectedOwner
+    }
+
+    /// `get` prints the payload as a bare JSON object, or `null` when nothing plays.
+    /// Throws `AdapterError.invalidOutput` for anything else.
+    nonisolated static func getOutputInfo(_ output: Data) throws -> NowPlayingInfo? {
+        guard let object = try? JSONSerialization.jsonObject(with: output, options: [.fragmentsAllowed]) else {
+            throw AdapterError.invalidOutput
+        }
+        if object is NSNull { return nil }
+        guard let payload = object as? [String: Any] else { throw AdapterError.invalidOutput }
+        return info(from: payload.filter { !($0.value is NSNull) })
     }
 
     /// Restart delays: 2 s, 5 s, then 15 s for every later attempt.
@@ -309,6 +406,58 @@ final class MediaRemoteAdapterClient: ObservableObject {
         }
         if let seconds = (value as? NSNumber)?.doubleValue { return Date(timeIntervalSince1970: seconds) }
         return nil
+    }
+}
+
+// MARK: - CommandProcesses
+
+/// Lock-protected set of running command processes, shared by the background command queue
+/// and the main-actor shutdown path.
+final class CommandProcesses: @unchecked Sendable {
+    private let lock = NSLock()
+    private var processes: [ObjectIdentifier: Process] = [:]
+    private var terminations = 0
+
+    /// Changes on every `terminateAll()`, so a command can tell it was cancelled between steps.
+    var epoch: Int {
+        lock.lock(); defer { lock.unlock() }
+        return terminations
+    }
+
+    func insert(_ process: Process) {
+        lock.lock(); defer { lock.unlock() }
+        processes[ObjectIdentifier(process)] = process
+    }
+
+    func remove(_ process: Process) {
+        lock.lock(); defer { lock.unlock() }
+        processes.removeValue(forKey: ObjectIdentifier(process))
+    }
+
+    /// Terminates every tracked process. Each `run` call still waits for its own process,
+    /// kills it if needed, and removes it from the set.
+    func terminateAll() {
+        lock.lock()
+        terminations += 1
+        let running = Array(processes.values)
+        lock.unlock()
+        for process in running where process.isRunning { process.terminate() }
+    }
+}
+
+/// Stdout collected from the pipe's background queue and read by the waiting command thread.
+private final class LockedData: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock(); defer { lock.unlock() }
+        storage.append(chunk)
+    }
+
+    var data: Data {
+        lock.lock(); defer { lock.unlock() }
+        return storage
     }
 }
 

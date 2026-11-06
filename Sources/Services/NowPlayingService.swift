@@ -129,8 +129,8 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var lastCommandError: String?
 
     enum TransportRoute: Equatable {
-        /// The main source is the Now Playing app: adapter `send`.
-        case adapter
+        /// The main source is the Now Playing app: adapter `send`, only while this owner is still Now Playing.
+        case adapter(expectedOwner: String)
         /// Allowlisted AppleScript command to the player with this bundle id.
         case appleScript(String)
         /// No command can reach only this app.
@@ -143,7 +143,7 @@ final class NowPlayingService: ObservableObject {
     /// other app gets no route rather than a command that could reach another app.
     static func route(for bundleIdentifier: String?, nowPlayingID: String?) -> TransportRoute? {
         guard let id = bundleIdentifier else { return nil }
-        if id == nowPlayingID { return .adapter }
+        if id == nowPlayingID { return .adapter(expectedOwner: id) }
         if isPlayer(id) { return .appleScript(id) }
         return .unavailable(notNowPlayingReason)
     }
@@ -155,8 +155,8 @@ final class NowPlayingService: ObservableObject {
             lastCommandError = TransportError.noSource.localizedDescription
         case .unavailable(let reason):
             lastCommandError = reason
-        case .adapter:
-            adapter.send(action) { [weak self] error in
+        case .adapter(let owner):
+            adapter.send(action, expectedOwner: owner, appName: Self.displayNameForBundleID(owner)) { [weak self] error in
                 if let error { self?.lastCommandError = error.localizedDescription }
             }
         case .appleScript(let id):
@@ -315,9 +315,35 @@ final class NowPlayingService: ObservableObject {
         rebuildSources()
     }
 
+    /// Skips a poll that starts while another is running. NSAppleScript pumps the run loop while it
+    /// waits for a reply, so the poll timer can fire inside `poll()` (a transport command refreshes
+    /// through `poll()` too).
+    /// A class, not a struct: a mutating method would hold exclusive access to the gate for the
+    /// whole body, and a re-entrant check would itself be an exclusivity violation.
+    final class PollGate {
+        private(set) var isRunning = false
+
+        func run(_ body: () -> Void) -> Bool {
+            guard !isRunning else { return false }
+            isRunning = true
+            defer { isRunning = false }
+            body()
+            return true
+        }
+    }
+
+    private let pollGate = PollGate()
+
     private func poll() {
-        playerSnapshots = Self.readPlayerSnapshots(using: &compiledScripts)
-        rebuildSources()
+        _ = pollGate.run {
+            // Work on a copy: holding `compiledScripts` inout across AppleScript would make any
+            // re-entrant access an exclusivity violation.
+            var scripts = compiledScripts
+            let snapshots = Self.readPlayerSnapshots(using: &scripts)
+            compiledScripts = scripts
+            playerSnapshots = snapshots
+            rebuildSources()
+        }
     }
 
     private func rebuildSources() {

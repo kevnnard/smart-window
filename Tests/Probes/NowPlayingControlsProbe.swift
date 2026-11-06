@@ -42,5 +42,15 @@ struct NowPlayingControlsProbe {
         try check(!paused.isPlaying && paused.title == "Track" && paused.bundleIdentifier == "com.spotify.client", "paused player retained")
         let empty = NowPlayingService.parse("PAUSED", bundleIdentifier: "com.apple.Music")
         try check(empty.title.isEmpty && empty.bundleIdentifier == "com.apple.Music", "running idle player retained")
+        // AppleScript pumps the run loop while waiting, so a timer can call poll() inside poll().
+        let gate = NowPlayingService.PollGate()
+        var nestedRuns = 0
+        let outer = gate.run {
+            nestedRuns += 1
+            let inner = gate.run { nestedRuns += 1 }
+            try? check(!inner, "nested poll is skipped while one is running")
+        }
+        try check(outer && nestedRuns == 1, "outer poll runs once and the nested one does not")
+        try check(gate.run {}, "poll runs again after the previous one finished")
     }
 }
