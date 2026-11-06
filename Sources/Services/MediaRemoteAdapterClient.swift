@@ -243,15 +243,23 @@ final class MediaRemoteAdapterClient: ObservableObject {
         let check = Self.getArguments(script: adapter.script, framework: adapter.framework)
         let arguments = Self.sendArguments(script: adapter.script, framework: adapter.framework,
                                            command: Self.command(for: action))
+        // Capture the epoch now, not when the queued work starts: a `stop()` in between must
+        // cancel this command too.
+        let epoch = Self.currentCommandEpoch
         DispatchQueue.global(qos: .userInitiated).async {
-            let error = Self.sendIfOwner(expectedOwner, appName: appName, check: check, send: arguments)
+            let error = Self.sendIfOwner(expectedOwner, appName: appName, check: check, send: arguments,
+                                         epoch: epoch)
             DispatchQueue.main.async { completion(error) }
         }
     }
 
-    private nonisolated static func sendIfOwner(_ expectedOwner: String, appName: String,
-                                                check: [String], send: [String]) -> AdapterError? {
-        let epoch = commandProcesses.epoch
+    /// The cancellation epoch commands register under; `stop()` advances it.
+    nonisolated static var currentCommandEpoch: Int { commandProcesses.epoch }
+
+    /// Runs the owner check and then the send under `epoch`, the epoch current when the command was
+    /// queued. A stale epoch is refused before any process starts.
+    nonisolated static func sendIfOwner(_ expectedOwner: String, appName: String,
+                                        check: [String], send: [String], epoch: Int) -> AdapterError? {
         let current: NowPlayingInfo?
         switch run(arguments: check, timeout: ownerCheckTimeout, captureOutput: true, epoch: epoch) {
         case .failure(let error): return error

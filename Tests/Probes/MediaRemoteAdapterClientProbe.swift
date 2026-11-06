@@ -14,6 +14,13 @@ struct MediaRemoteAdapterClientProbe {
         func line(_ text: String) -> Data { Data(text.utf8) }
         typealias Client = MediaRemoteAdapterClient
 
+        // A command queued before stop() keeps the epoch it was queued under, so it never starts.
+        let staleEpoch = Client.currentCommandEpoch - 1
+        try check(Client.sendIfOwner("com.apple.Music", appName: "Music",
+                                     check: ["/nonexistent/check"], send: ["/nonexistent/send"],
+                                     epoch: staleEpoch) == .unavailable,
+                  "command queued before stop() is refused without launching anything")
+
         // Full payload
         let artwork = Data([0x89, 0x50, 0x4E, 0x47])
         let full = line("""
