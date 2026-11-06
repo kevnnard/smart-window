@@ -11,30 +11,34 @@ public struct AudioSourceInfo: Identifiable, Equatable {
     public let icon: NSImage?
     /// The source is the main one shown in the pill and targeted by the controls.
     public let isActive: Bool
-    /// The source reports that it is playing (MediaRemote for the Now Playing app, AppleScript for players).
+    /// The source reports that it is playing (its media session, else AppleScript for players).
     public let isPlaying: Bool
+    /// The source is a macOS Now Playing session, not only a running AppleScript player.
+    public let hasSession: Bool
 
-    public init(id: String, name: String, category: String, icon: NSImage?, isActive: Bool, isPlaying: Bool = false) {
+    public init(id: String, name: String, category: String, icon: NSImage?, isActive: Bool, isPlaying: Bool = false,
+                hasSession: Bool = false) {
         self.id = id
         self.name = name
         self.category = category
         self.icon = icon
         self.isActive = isActive
         self.isPlaying = isPlaying
+        self.hasSession = hasSession
     }
 
     /// Icons are excluded so polling does not republish when only the NSImage instance differs.
     public static func == (lhs: AudioSourceInfo, rhs: AudioSourceInfo) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.category == rhs.category
-            && lhs.isActive == rhs.isActive && lhs.isPlaying == rhs.isPlaying
+            && lhs.isActive == rhs.isActive && lhs.isPlaying == rhs.isPlaying && lhs.hasSession == rhs.hasSession
     }
 }
 
 // MARK: - NowPlayingService
 
-/// Shows the media session macOS reports as Now Playing (MediaRemote through mediaremote-adapter)
-/// plus running Spotify and Apple Music (AppleScript). Without the adapter only the AppleScript
-/// players are shown.
+/// Shows every media session macOS lists in Now Playing (the media sessions helper) plus running
+/// Spotify and Apple Music (AppleScript). While the helper is unavailable the adapter stream supplies
+/// the single Now Playing session; without either, only the AppleScript players are shown.
 @MainActor
 final class NowPlayingService: ObservableObject {
 
@@ -59,7 +63,7 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var sourceDisplayName: String = "Spotify"
     /// Category for badge styling: "spotify", "youtube", "ghostty", "music", "media".
     @Published private(set) var sourceCategory: String = "spotify"
-    /// Media sources: the Now Playing app and running Spotify/Music.
+    /// Media sources: one per Now Playing session, plus running Spotify/Music without a session.
     @Published private(set) var detectedSources: [AudioSourceInfo] = []
     /// Source chosen by the user; cleared when it is no longer detected, or stops while another source plays.
     @Published private(set) var selectedSourceID: String?
@@ -129,7 +133,7 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var lastCommandError: String?
 
     enum TransportRoute: Equatable {
-        /// The main source is the Now Playing app: adapter `send`, only while this owner is still Now Playing.
+        /// The main source is the current Now Playing app: adapter `send`, only while this owner is still current.
         case adapter(expectedOwner: String)
         /// Allowlisted AppleScript command to the player with this bundle id.
         case appleScript(String)
@@ -137,20 +141,26 @@ final class NowPlayingService: ObservableObject {
         case unavailable(String)
     }
 
-    static let notNowPlayingReason = "This app can only be controlled while it is the Mac's Now Playing app."
+    static func unavailableReason(appName: String) -> String {
+        "macOS only lets SmartWindow control \(appName) while it is the Mac's current Now Playing app."
+    }
 
-    /// The adapter reaches only the Now Playing app and AppleScript only Spotify/Music, so any
-    /// other app gets no route rather than a command that could reach another app.
-    static func route(for bundleIdentifier: String?, nowPlayingID: String?) -> TransportRoute? {
+    /// The only routes: AppleScript for Spotify/Music, the adapter for the current Now Playing app
+    /// (macOS gives no per-session control), and no command for any other app.
+    static func route(for bundleIdentifier: String?, current: String?, appName: String) -> TransportRoute? {
         guard let id = bundleIdentifier else { return nil }
-        if id == nowPlayingID { return .adapter(expectedOwner: id) }
         if isPlayer(id) { return .appleScript(id) }
-        return .unavailable(notNowPlayingReason)
+        if id == current { return .adapter(expectedOwner: id) }
+        return .unavailable(unavailableReason(appName: appName))
+    }
+
+    private func currentRoute() -> TransportRoute? {
+        Self.route(for: playerBundleIdentifier, current: currentNowPlayingID, appName: sourceDisplayName)
     }
 
     func perform(_ action: TransportAction) {
         if lastCommandError != nil { lastCommandError = nil }
-        switch Self.route(for: playerBundleIdentifier, nowPlayingID: nowPlayingID) {
+        switch currentRoute() {
         case .none:
             lastCommandError = TransportError.noSource.localizedDescription
         case .unavailable(let reason):
@@ -267,6 +277,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     private let adapter = MediaRemoteAdapterClient.shared
+    private let sessionsClient = MediaSessionsClient.shared
     private var cancellables = Set<AnyCancellable>()
     private var pollTimer: Timer?
     private var compiledScripts: [String: NSAppleScript] = [:]
@@ -274,13 +285,12 @@ final class NowPlayingService: ObservableObject {
     private var artworkSource: ArtworkSource = .none
     private var artworkTask: Task<Void, Never>?
     private var playerSnapshots: [Snapshot] = []
-    /// The adapter's session; nil while nothing plays or the adapter is unavailable.
-    private var nowPlayingInfo: NowPlayingInfo?
+    /// Sessions from the helper, or the adapter's single session while the helper is unavailable.
+    private var sessions: [MediaSession] = []
+    /// The Mac's current Now Playing app (owning app), when known.
+    private var currentNowPlayingID: String?
     private var candidateSources: [AudioSourceInfo] = []
     private var iconCache: [String: NSImage] = [:]
-
-    /// The Now Playing app, when the adapter reports one.
-    private var nowPlayingID: String? { nowPlayingInfo?.ownerBundleIdentifier }
 
     init() {
         // Delay start to avoid dispatch_once issues during SwiftUI layout
@@ -297,10 +307,22 @@ final class NowPlayingService: ObservableObject {
     // MARK: - Polling
 
     private func startPolling() {
-        adapter.start()
-        adapter.$info.combineLatest(adapter.$adapterAvailable)
-            .sink { [weak self] info, available in
-                self?.adapterChanged(available ? info : nil)
+        sessionsClient.start()
+        sessionsClient.$status
+            .sink { [weak self] status in
+                guard let self else { return }
+                // One stream at a time: the adapter stream only while the helper is unavailable.
+                if Self.runsAdapterStream(helperStatus: status) { self.adapter.start() } else { self.adapter.stopStream() }
+            }
+            .store(in: &cancellables)
+        sessionsClient.$status
+            .combineLatest(sessionsClient.$sessions, sessionsClient.$currentBundleID)
+            .combineLatest(adapter.$info, adapter.$adapterAvailable)
+            .sink { [weak self] helper, info, adapterAvailable in
+                let (status, sessions, current) = helper
+                self?.sessionsChanged(Self.effectiveSessions(helperAvailable: status == .available,
+                                                             helperSessions: sessions, helperCurrent: current,
+                                                             adapterInfo: adapterAvailable ? info : nil))
             }
             .store(in: &cancellables)
         poll()
@@ -309,10 +331,26 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
-    private func adapterChanged(_ info: NowPlayingInfo?) {
-        guard info != nowPlayingInfo else { return }
-        nowPlayingInfo = info
+    private func sessionsChanged(_ input: (sessions: [MediaSession], current: String?)) {
+        guard input.sessions != sessions || input.current != currentNowPlayingID else { return }
+        sessions = input.sessions
+        currentNowPlayingID = input.current
         rebuildSources()
+    }
+
+    /// The helper's sessions while it is healthy; otherwise the adapter's single Now Playing
+    /// session, which is also the current one; otherwise none (AppleScript players only).
+    static func effectiveSessions(helperAvailable: Bool, helperSessions: [MediaSession], helperCurrent: String?,
+                                  adapterInfo: NowPlayingInfo?) -> (sessions: [MediaSession], current: String?) {
+        if helperAvailable { return (helperSessions, helperCurrent) }
+        guard let info = adapterInfo, let session = MediaSession(info: info) else { return ([], nil) }
+        return ([session], session.ownerBundleIdentifier)
+    }
+
+    /// The adapter stream is the fallback reader: it runs only once the helper is known unavailable,
+    /// not while it starts or is healthy.
+    static func runsAdapterStream(helperStatus: MediaSessionsClient.Status) -> Bool {
+        helperStatus == .unavailable
     }
 
     /// Skips a poll that starts while another is running. NSAppleScript pumps the run loop while it
@@ -347,8 +385,8 @@ final class NowPlayingService: ObservableObject {
     }
 
     private func rebuildSources() {
-        candidateSources = Self.mergeSources(nowPlaying: nowPlayingInfo, players: playerSnapshots,
-                                             name: Self.displayNameForBundleID, icon: icon(for:))
+        candidateSources = Self.mergeSources(sessions: sessions, players: playerSnapshots,
+                                             name: Self.displayName(sessions: sessions), icon: icon(for:))
         recompute()
     }
 
@@ -363,14 +401,14 @@ final class NowPlayingService: ObservableObject {
             selectionWasPlaying = false
         }
         let mainID = Self.mainSource(selected: selectedSourceID, selectionWasPlaying: selectionWasPlaying,
-                                     sources: candidateSources, nowPlayingID: nowPlayingID)
+                                     sources: candidateSources, current: currentNowPlayingID)
         let sources = candidateSources.map {
             AudioSourceInfo(id: $0.id, name: $0.name, category: $0.category, icon: $0.icon,
-                            isActive: $0.id == mainID, isPlaying: $0.isPlaying)
+                            isActive: $0.id == mainID, isPlaying: $0.isPlaying, hasSession: $0.hasSession)
         }
         if sources != detectedSources { detectedSources = sources }
         let main = sources.first(where: { $0.id == mainID })
-        apply(Self.snapshot(for: main, nowPlaying: nowPlayingInfo, players: playerSnapshots), main: main)
+        apply(Self.snapshot(for: main, sessions: sessions, players: playerSnapshots), main: main)
     }
 
     private func apply(_ snapshot: Snapshot, main: AudioSourceInfo?) {
@@ -390,7 +428,7 @@ final class NowPlayingService: ObservableObject {
         if name != sourceDisplayName { sourceDisplayName = name }
         if category != sourceCategory { sourceCategory = category }
 
-        let route = Self.route(for: snapshot.bundleIdentifier, nowPlayingID: nowPlayingID)
+        let route = currentRoute()
         let controllable: Bool
         let reason: String?
         switch route {
@@ -432,15 +470,21 @@ final class NowPlayingService: ObservableObject {
         return nil
     }
 
-    /// The Now Playing app (parent app when set, else its bundle id) first, then running AppleScript
-    /// players. A Now Playing Spotify or Music is one source with the adapter's playing state.
+    /// One source per session owner (parent app when set, else the session's bundle id), in the
+    /// helper's order, then running AppleScript players without a session. A Spotify or Music with a
+    /// session is one source; its playing state comes from the session, with AppleScript as backup.
     /// Apps without a media session never appear.
-    static func mergeSources(nowPlaying: NowPlayingInfo?, players snapshots: [Snapshot],
+    static func mergeSources(sessions: [MediaSession], players snapshots: [Snapshot],
                              name: (String) -> String, icon: (String) -> NSImage?) -> [AudioSourceInfo] {
         var sources: [AudioSourceInfo] = []
-        if let owner = nowPlaying?.ownerBundleIdentifier {
+        for session in sessions {
+            let owner = session.ownerBundleIdentifier
+            guard !sources.contains(where: { $0.id == owner }) else { continue }
+            let shown = mainSession(for: owner, in: sessions)
+            let player = snapshots.first(where: { $0.bundleIdentifier == owner })
+            let playing = shown?.playing ?? player?.isPlaying ?? false
             sources.append(AudioSourceInfo(id: owner, name: name(owner), category: categoryForBundleID(owner),
-                                           icon: icon(owner), isActive: false, isPlaying: nowPlaying?.playing ?? false))
+                                           icon: icon(owner), isActive: false, isPlaying: playing, hasSession: true))
         }
         for snapshot in snapshots {
             guard let id = snapshot.bundleIdentifier, !sources.contains(where: { $0.id == id }) else { continue }
@@ -450,36 +494,45 @@ final class NowPlayingService: ObservableObject {
         return sources
     }
 
-    /// Retained selection (see `retainedSelection`); otherwise the Now Playing app, a playing
-    /// AppleScript player, a paused AppleScript player, or nil (idle).
-    static func mainSource(selected: String?, selectionWasPlaying: Bool = true,
-                           sources: [AudioSourceInfo], nowPlayingID: String?) -> String? {
-        if let selected = retainedSelection(selected, selectionWasPlaying: selectionWasPlaying,
-                                            sources: sources) { return selected }
-        if let nowPlayingID, sources.contains(where: { $0.id == nowPlayingID }) { return nowPlayingID }
-        return sources.first(where: { isPlayer($0.id) && $0.isPlaying })?.id
-            ?? sources.first(where: { isPlayer($0.id) })?.id
+    /// The session shown for an app with several: the first playing one, else the first.
+    static func mainSession(for owner: String, in sessions: [MediaSession]) -> MediaSession? {
+        let owned = sessions.filter { $0.ownerBundleIdentifier == owner }
+        return owned.first(where: { $0.playing == true }) ?? owned.first
     }
 
-    /// The Now Playing app shows the adapter's metadata, with the AppleScript player as backup for
-    /// missing fields; AppleScript players otherwise keep their own metadata. The playing state
-    /// always comes from the merged source so the badge and the main display agree.
-    static func snapshot(for main: AudioSourceInfo?, nowPlaying: NowPlayingInfo?, players snapshots: [Snapshot]) -> Snapshot {
+    /// Retained selection (see `retainedSelection`); otherwise a playing session (the current Now
+    /// Playing app first), the current Now Playing app, a playing AppleScript player, then the first
+    /// paused source, or nil (idle).
+    static func mainSource(selected: String?, selectionWasPlaying: Bool = true,
+                           sources: [AudioSourceInfo], current: String?) -> String? {
+        if let selected = retainedSelection(selected, selectionWasPlaying: selectionWasPlaying,
+                                            sources: sources) { return selected }
+        let playingSessions = sources.filter { $0.hasSession && $0.isPlaying }
+        if let current, playingSessions.contains(where: { $0.id == current }) { return current }
+        if let first = playingSessions.first { return first.id }
+        if let current, sources.contains(where: { $0.id == current }) { return current }
+        return sources.first(where: \.isPlaying)?.id ?? sources.first?.id
+    }
+
+    /// A source with a session shows the session's metadata and timing, with the AppleScript player
+    /// as backup for missing fields; AppleScript players otherwise keep their own metadata. The
+    /// playing state always comes from the merged source so the badge and the main display agree.
+    static func snapshot(for main: AudioSourceInfo?, sessions: [MediaSession], players snapshots: [Snapshot]) -> Snapshot {
         guard let main else { return .idle }
         let player = snapshots.first(where: { $0.bundleIdentifier == main.id })
-        if let info = nowPlaying, info.ownerBundleIdentifier == main.id {
+        if let session = mainSession(for: main.id, in: sessions) {
             func text(_ value: String, _ backup: String?) -> String { value.isEmpty ? backup ?? "" : value }
             return Snapshot(isPlaying: main.isPlaying,
-                            title: text(info.title, player?.title),
-                            artist: text(info.artist, player?.artist),
-                            album: text(info.album, player?.album),
+                            title: text(session.title, player?.title),
+                            artist: text(session.artist, player?.artist),
+                            album: text(session.album, player?.album),
                             bundleIdentifier: main.id,
-                            artworkURL: info.artworkData == nil ? player?.artworkURL : nil,
-                            artworkData: info.artworkData,
-                            duration: info.duration,
-                            elapsedTime: info.elapsedTime,
-                            elapsedTimestamp: info.timestamp,
-                            playbackRate: main.isPlaying ? info.playbackRate ?? 1 : 0)
+                            artworkURL: session.artworkData == nil ? player?.artworkURL : nil,
+                            artworkData: session.artworkData,
+                            duration: session.duration,
+                            elapsedTime: session.elapsedTime,
+                            elapsedTimestamp: session.timestamp,
+                            playbackRate: main.isPlaying ? session.playbackRate ?? 1 : 0)
         }
         if var player {
             player.isPlaying = main.isPlaying
@@ -497,6 +550,17 @@ final class NowPlayingService: ObservableObject {
         if lower.contains("ghostty") || lower.contains("terminal") || lower.contains("iterm") { return "ghostty" }
         if lower.contains("music") || lower.contains("podcast") { return "music" }
         return "media"
+    }
+
+    /// Names an app by bundle id, using the helper's display name for a session owned by that id
+    /// when the system cannot name it.
+    static func displayName(sessions: [MediaSession]) -> (String) -> String {
+        { id in
+            let name = displayNameForBundleID(id)
+            guard name == id else { return name }
+            return sessions.first(where: { $0.bundleIdentifier == id && $0.parentApplicationBundleIdentifier == nil })?
+                .displayName ?? name
+        }
     }
 
     static func displayNameForBundleID(_ id: String) -> String {

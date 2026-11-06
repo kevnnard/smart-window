@@ -32,8 +32,9 @@ public struct NowPlayingInfo: Equatable {
 
 // MARK: - MediaRemoteAdapterClient
 
-/// Runs `mediaremote-adapter.pl stream` under `/usr/bin/perl` and publishes the Now Playing session.
-/// The stream is restarted with backoff when it exits or stays silent at startup.
+/// Runs `mediaremote-adapter.pl stream` under `/usr/bin/perl` and publishes the Now Playing session,
+/// and sends commands to the Now Playing app. The stream is only the fallback reader while the media
+/// sessions helper is unavailable; it is restarted with backoff when it exits or stays silent at startup.
 @MainActor
 final class MediaRemoteAdapterClient: ObservableObject {
 
@@ -96,14 +97,19 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     /// Starts the stream once; later calls do nothing while it is running or waiting to restart.
     func start() {
+        observeTermination()
         guard !started else { return }
         started = true
-        terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.stop() }
-        }
         launch()
+    }
+
+    /// Terminates the stream and cancels pending restarts; running commands continue.
+    func stopStream() {
+        guard started || process != nil else { return }
+        started = false
+        generation += 1
+        terminateProcess()
+        markUnavailable()
     }
 
     /// Terminates the stream and any running command, and cancels pending restarts.
@@ -115,6 +121,16 @@ final class MediaRemoteAdapterClient: ObservableObject {
         terminateProcess()
         Self.commandProcesses.terminateAll()
         markUnavailable()
+    }
+
+    /// App termination ends the stream and any command, whether or not the stream runs.
+    private func observeTermination() {
+        guard terminationObserver == nil else { return }
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stop() }
+        }
     }
 
     private func launch() {
@@ -214,6 +230,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
     /// `completion` runs on the main queue with nil on exit status 0.
     func send(_ action: NowPlayingService.TransportAction, expectedOwner: String, appName: String,
               completion: @escaping (AdapterError?) -> Void) {
+        observeTermination()
         guard let adapter = MediaRemoteAdapterLocator.current() else {
             completion(.unavailable)
             return
