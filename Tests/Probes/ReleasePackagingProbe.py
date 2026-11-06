@@ -18,6 +18,8 @@ class ReleasePackagingProbe(unittest.TestCase):
         (root / "scripts").mkdir()
         (root / "Resources").mkdir()
         shutil.copy2(ROOT / "scripts/install-app.sh", root / "scripts/install-app.sh")
+        shutil.copy2(ROOT / "scripts/build-mediaremote-adapter.sh", root / "scripts/build-mediaremote-adapter.sh")
+        shutil.copytree(ROOT / "Vendor/mediaremote-adapter", root / "Vendor/mediaremote-adapter")
         shutil.copy2(ROOT / "Resources/Info.plist", root / "Resources/Info.plist")
         old = root / ".build/release"
         old.mkdir(parents=True)
@@ -53,9 +55,15 @@ esac
         root, fresh, bundle, calls, result = self.exercise()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((bundle / "Contents/MacOS/SmartWindow").read_text(), "fresh build")
+        adapter = bundle / "Contents/Resources/MediaRemoteAdapter"
+        self.assertTrue((adapter / "mediaremote-adapter.pl").is_file())
+        self.assertTrue((adapter / "MediaRemoteAdapter.framework/MediaRemoteAdapter").exists())
+        self.assertTrue((adapter / "MediaRemoteAdapter.framework/Versions/Current").is_symlink())
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout,
                          "Building SmartWindow in release mode...\nCreating app bundle...\n"
+                         "Building MediaRemoteAdapter.framework (arm64 x86_64, macOS 13.0+)...\n"
+                         f"Built {root / '.build/mediaremote-adapter/MediaRemoteAdapter.framework'}\n"
                          "Skipping code signing (set SMARTWINDOW_CODESIGN_IDENTITY to sign releases).\n"
                          "Skipping installation to /Applications (SMARTWINDOW_SKIP_INSTALL=1).\n"
                          f"Done. App bundle ready at {bundle}\n")

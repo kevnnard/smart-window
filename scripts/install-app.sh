@@ -25,6 +25,10 @@ sign_app_bundle() {
 
     require_cmd codesign
 
+    printf 'Signing nested MediaRemoteAdapter.framework with identity: %s\n' "$CODESIGN_IDENTITY"
+    codesign --force --sign "$CODESIGN_IDENTITY" --timestamp --options "$CODESIGN_OPTIONS" \
+        "$ADAPTER_BUNDLE_DIR/MediaRemoteAdapter.framework"
+
     printf 'Signing app bundle with identity: %s\n' "$CODESIGN_IDENTITY"
 
     SIGN_ARGS=(
@@ -67,6 +71,15 @@ cp "$ROOT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 if [ -f "$ROOT_DIR/Resources/AppIcon.icns" ]; then
     cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
+
+# Now Playing source (S9): MediaRemote only answers Apple-signed clients, so the
+# app runs the vendored adapter through /usr/bin/perl (see MediaRemoteAdapterLocator).
+bash "$ROOT_DIR/scripts/build-mediaremote-adapter.sh"
+ADAPTER_BUILD_DIR="$ROOT_DIR/.build/mediaremote-adapter"
+ADAPTER_BUNDLE_DIR="$APP_BUNDLE/Contents/Resources/MediaRemoteAdapter"
+mkdir -p "$ADAPTER_BUNDLE_DIR"
+cp -R "$ADAPTER_BUILD_DIR/MediaRemoteAdapter.framework" "$ADAPTER_BUNDLE_DIR/"
+cp "$ADAPTER_BUILD_DIR/mediaremote-adapter.pl" "$ADAPTER_BUNDLE_DIR/"
 
 xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 sign_app_bundle
