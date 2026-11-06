@@ -68,6 +68,46 @@ import Foundation
         let noneActive = [source("a"), source("b"), source("c"), source("d")]
         check(NotchView.visibleSources(noneActive, max: 3).map(\.id) == ["a", "b", "c"], "no active source keeps first 3")
 
+        // Progress position: interpolated while playing, frozen while paused, clamped, nil when unknown
+        let t0 = Date(timeIntervalSinceReferenceDate: 1_000)
+        check(NotchProgress.position(elapsed: 60, timestamp: t0, rate: 1, duration: 240, now: t0.addingTimeInterval(5)) == 65,
+              "playing position interpolates from the timestamp")
+        check(NotchProgress.position(elapsed: 60, timestamp: t0, rate: 2, duration: 240, now: t0.addingTimeInterval(5)) == 70,
+              "playing position scales with the playback rate")
+        check(NotchProgress.position(elapsed: 60, timestamp: t0, rate: 0, duration: 240, now: t0.addingTimeInterval(30)) == 60,
+              "paused position stays frozen")
+        check(NotchProgress.position(elapsed: 230, timestamp: t0, rate: 1, duration: 240, now: t0.addingTimeInterval(60)) == 240,
+              "position is clamped to duration")
+        check(NotchProgress.position(elapsed: 60, timestamp: nil, rate: 1, duration: 240, now: t0) == 60,
+              "missing timestamp uses elapsed as is")
+        check(NotchProgress.position(elapsed: 60, timestamp: t0, rate: 1, duration: nil, now: t0) == nil,
+              "nil when duration is unknown")
+        check(NotchProgress.position(elapsed: 60, timestamp: t0, rate: 1, duration: 0, now: t0) == nil,
+              "nil when duration is zero")
+        check(NotchProgress.position(elapsed: nil, timestamp: t0, rate: 1, duration: 240, now: t0) == nil,
+              "nil when elapsed is unknown")
+
+        // Time format: m:ss, or h:mm:ss from one hour
+        check(NotchProgress.format(0) == "0:00", "format 0 is 0:00")
+        check(NotchProgress.format(65) == "1:05", "format 65 is 1:05")
+        check(NotchProgress.format(3725) == "1:02:05", "format 3725 is 1:02:05")
+        check(NotchProgress.format(59.9) == "0:59", "format truncates fractional seconds")
+        check(NotchProgress.format(-3) == "0:00", "format never shows negative time")
+
+        // Card copy: only reported metadata
+        check(NotchView.subtitle(artist: "A", album: "B") == "A — B", "subtitle joins artist and album")
+        check(NotchView.subtitle(artist: "A", album: "") == "A", "subtitle is artist alone")
+        check(NotchView.subtitle(artist: "", album: "B") == "B", "subtitle is album alone")
+        check(NotchView.subtitle(artist: "", album: "") == nil, "no subtitle without metadata")
+
+        // Control status under the transport buttons
+        let errorStatus = NotchView.controlStatus(error: "E", canControl: false, reason: "R")
+        check(errorStatus?.text == "E" && errorStatus?.isError == true, "command error replaces the reason")
+        let reasonStatus = NotchView.controlStatus(error: nil, canControl: false, reason: "R")
+        check(reasonStatus?.text == "R" && reasonStatus?.isError == false, "reason shown when controls are disabled")
+        check(NotchView.controlStatus(error: nil, canControl: true, reason: "R") == nil, "no status when controllable")
+        check(NotchView.controlStatus(error: nil, canControl: false, reason: nil) == nil, "no status without a reason")
+
         print("PASS: NotchSettingsProbe verified")
     }
 }

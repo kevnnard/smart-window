@@ -180,6 +180,25 @@ struct NotchView: View {
         return [active] + head.prefix(limit - 1)
     }
 
+    /// "Artist — Album", either part alone, or nil when the source reports neither.
+    nonisolated static func subtitle(artist: String, album: String) -> String? {
+        let parts = [artist, album].filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " — ")
+    }
+
+    /// Text under the transport buttons: the last command error, else why the source cannot be controlled.
+    nonisolated static func controlStatus(error: String?, canControl: Bool,
+                                          reason: String?) -> (text: String, isError: Bool)? {
+        if let error { return (error, true) }
+        if !canControl, let reason { return (reason, false) }
+        return nil
+    }
+
+    /// Name of the main source, or nil when there is none (the service's default name is not a source).
+    private var mainSourceName: String? {
+        nowPlaying.hasPlayer ? nowPlaying.sourceDisplayName : nil
+    }
+
     private var currentLayout: NotchLayout {
         if let screen = screen {
             return NotchLayout.forScreen(screen)
@@ -306,11 +325,18 @@ struct NotchView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(sourceAccentColor)
-                    .frame(width: 17, height: 17)
-                Text(sourceIconText)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.black)
+                if let image = nowPlaying.artwork ?? nowPlaying.playerIcon {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Text(sourceIconText)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.black)
+                }
             }
+            .frame(width: 17, height: 17)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
                 MarqueeText(
@@ -369,14 +395,14 @@ struct NotchView: View {
     // MARK: - Expanded Dynamic Island Card
 
     private func expandedIslandCard(width: CGFloat) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             // Header: Source Badge + App Selector Pills + Close
             HStack {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(sourceAccentColor)
                         .frame(width: 7, height: 7)
-                    Text("\(nowPlaying.sourceDisplayName) Audio Stream")
+                    Text(mainSourceName ?? "No media")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(.white.opacity(0.95))
                         .lineLimit(1)
@@ -452,81 +478,90 @@ struct NotchView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { nowPlaying.openPlayer() }
 
+                // The header already names the app, so no separate app line is shown here.
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(nowPlaying.trackTitle.isEmpty ? nowPlaying.sourceDisplayName : nowPlaying.trackTitle)
+                    Text(nowPlaying.trackTitle.isEmpty ? (mainSourceName ?? "Nothing playing") : nowPlaying.trackTitle)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
 
-                    Text(nowPlaying.artistName.isEmpty ? "Active Audio Output" : nowPlaying.artistName)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.65))
-                        .lineLimit(1)
+                    if let subtitle = Self.subtitle(artist: nowPlaying.artistName, album: nowPlaying.albumName) {
+                        Text(subtitle)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.65))
+                            .lineLimit(1)
+                    }
 
-                    Text("CoreAudio Stream · \(nowPlaying.sourceDisplayName)")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundColor(sourceAccentColor)
+                    progressSection
                 }
-
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Bottom: Controls + Scrubber
-            HStack(spacing: 14) {
-                // Transport buttons
-                HStack(spacing: 10) {
-                    Button { nowPlaying.perform(.previous) } label: {
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white)
-                            .frame(width: 26, height: 26)
-                            .background(Color.white.opacity(0.08), in: Circle())
-                    }
-                    .buttonStyle(.plain)
+            // Bottom: Controls + state, with the control status under the buttons
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 14) {
+                    // Transport buttons
+                    HStack(spacing: 10) {
+                        Button { nowPlaying.perform(.previous) } label: {
+                            Image(systemName: "backward.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Color.white.opacity(0.08), in: Circle())
+                        }
+                        .buttonStyle(.plain)
 
-                    Button { nowPlaying.perform(.playPause) } label: {
-                        Image(systemName: nowPlaying.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                            .frame(width: 32, height: 32)
-                            .background(Color.white, in: Circle())
-                    }
-                    .buttonStyle(.plain)
+                        Button { nowPlaying.perform(.playPause) } label: {
+                            Image(systemName: nowPlaying.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.black)
+                                .frame(width: 32, height: 32)
+                                .background(Color.white, in: Circle())
+                        }
+                        .buttonStyle(.plain)
 
-                    Button { nowPlaying.perform(.next) } label: {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white)
-                            .frame(width: 26, height: 26)
-                            .background(Color.white.opacity(0.08), in: Circle())
+                        Button { nowPlaying.perform(.next) } label: {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Color.white.opacity(0.08), in: Circle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    .disabled(!nowPlaying.canControl)
+                    .opacity(nowPlaying.canControl ? 1 : 0.4)
+
+                    // Playback state, also shown when the source reports no position.
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        if nowPlaying.isPlaying {
+                            WaveformBars(color: sourceAccentColor)
+                                .frame(width: 18, height: 14)
+                        }
+                        Text(nowPlaying.isPlaying ? "Playing" : "Paused")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.55))
+                    }
                 }
-                .disabled(!nowPlaying.canControl)
-                .opacity(nowPlaying.canControl ? 1 : 0.4)
 
-                // Playback state. The service exposes no position or duration, so no scrubber is shown.
-                HStack(spacing: 8) {
-                    Spacer(minLength: 0)
-                    if nowPlaying.isPlaying {
-                        WaveformBars(color: sourceAccentColor)
-                            .frame(width: 18, height: 14)
-                    }
-                    Text(nowPlaying.isPlaying ? "Playing" : "Paused")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.55))
-                }
-
-                if let error = nowPlaying.lastCommandError {
-                    Text(error)
+                if let status = Self.controlStatus(error: nowPlaying.lastCommandError,
+                                                   canControl: nowPlaying.canControl,
+                                                   reason: nowPlaying.controlUnavailableReason) {
+                    Text(status.text)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.red.opacity(0.85))
+                        .foregroundColor(status.isError ? .red.opacity(0.85) : .white.opacity(0.5))
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help(status.text)
                 }
             }
         }
-        .padding(16)
-        .frame(width: width, height: NotchLayout.expandedCardHeight)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+        // Top-aligned so a status line appearing under the controls never shifts the rows above.
+        .frame(width: width, height: NotchLayout.expandedCardHeight, alignment: .top)
         .background(Color.black.opacity(0.94))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
@@ -534,6 +569,51 @@ struct NotchView: View {
                 .stroke(Color.white.opacity(0.14), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.8), radius: 24, y: 10)
+    }
+
+    // MARK: - Progress
+
+    /// Ticks once a second only while playing; paused or unknown positions need no timer.
+    @ViewBuilder
+    private var progressSection: some View {
+        if nowPlaying.playbackRate > 0 {
+            TimelineView(.periodic(from: Date(), by: 1)) { context in
+                progressRow(at: context.date)
+            }
+        } else {
+            progressRow(at: Date())
+        }
+    }
+
+    /// Bar with elapsed and total time, or nothing when the source reports no duration or elapsed time.
+    @ViewBuilder
+    private func progressRow(at date: Date) -> some View {
+        if let duration = nowPlaying.duration,
+           let position = NotchProgress.position(elapsed: nowPlaying.elapsedTime,
+                                                 timestamp: nowPlaying.elapsedTimestamp,
+                                                 rate: nowPlaying.playbackRate,
+                                                 duration: duration, now: date) {
+            VStack(spacing: 3) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.15))
+                        Capsule()
+                            .fill(sourceAccentColor)
+                            .frame(width: geometry.size.width * CGFloat(position / duration))
+                    }
+                }
+                .frame(height: 3)
+
+                HStack {
+                    Text(NotchProgress.format(position))
+                    Spacer(minLength: 0)
+                    Text(NotchProgress.format(duration))
+                }
+                .font(.system(size: 9, weight: .medium, design: .rounded).monospacedDigit())
+                .foregroundColor(.white.opacity(0.5))
+            }
+            .padding(.top, 2)
+        }
     }
 }
 
