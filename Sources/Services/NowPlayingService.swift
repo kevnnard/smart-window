@@ -10,21 +10,31 @@ public struct AudioSourceInfo: Identifiable, Equatable {
     public let name: String
     public let category: String // "spotify", "youtube", "ghostty", "music", "media"
     public let icon: NSImage?
+    /// The source is the main one shown in the pill and targeted by the controls.
     public let isActive: Bool
+    /// A process of the source is outputting audio, or its player reports playing.
+    public let isPlaying: Bool
 
-    public init(id: String, name: String, category: String, icon: NSImage?, isActive: Bool) {
+    public init(id: String, name: String, category: String, icon: NSImage?, isActive: Bool, isPlaying: Bool = false) {
         self.id = id
         self.name = name
         self.category = category
         self.icon = icon
         self.isActive = isActive
+        self.isPlaying = isPlaying
+    }
+
+    /// Icons are excluded so polling does not republish when only the NSImage instance differs.
+    public static func == (lhs: AudioSourceInfo, rhs: AudioSourceInfo) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.category == rhs.category
+            && lhs.isActive == rhs.isActive && lhs.isPlaying == rhs.isPlaying
     }
 }
 
 // MARK: - NowPlayingService
 
-/// Monitors the current track in Spotify or Apple Music, or active audio streams from browsers,
-/// terminals (Ghostty), and other media applications via CoreAudio.
+/// Monitors the current track in Spotify or Apple Music, and the apps producing sound
+/// (browsers, terminals, any app) via per-process CoreAudio data.
 @MainActor
 final class NowPlayingService: ObservableObject {
 
@@ -44,6 +54,13 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var sourceCategory: String = "spotify"
     /// Active media/audio sources detected on the system.
     @Published private(set) var detectedSources: [AudioSourceInfo] = []
+    /// Source chosen by the user; cleared when it is no longer detected.
+    @Published private(set) var selectedSourceID: String?
+
+    /// There is a main source the transport controls can target.
+    var canControl: Bool {
+        playerBundleIdentifier != nil
+    }
 
     /// Formatted "Artist — Title" for display in the bar
     var displayText: String {
@@ -64,12 +81,20 @@ final class NowPlayingService: ObservableObject {
 
     /// Icon of the running player, for the notch badge when no artwork exists.
     var playerIcon: NSImage? {
-        guard let id = playerBundleIdentifier,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
+        guard let id = playerBundleIdentifier else { return nil }
+        if let cached = iconCache[id] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
         return NSWorkspace.shared.icon(forFile: url.path)
     }
 
     // MARK: - Actions
+
+    /// Makes the source the main one shown and controlled while it stays detected.
+    func selectSource(_ id: String) {
+        guard detectedSources.contains(where: { $0.id == id }) else { return }
+        if selectedSourceID != id { selectedSourceID = id }
+        recompute()
+    }
 
     /// Brings the running player to the front. Does nothing when no player is running.
     func openPlayer() {
@@ -93,26 +118,51 @@ final class NowPlayingService: ObservableObject {
     enum TransportAction: String { case previous = "previous track", playPause = "playpause", next = "next track" }
     @Published private(set) var lastCommandError: String?
 
+    enum TransportRoute: Equatable {
+        /// Allowlisted AppleScript command to the player with this bundle id.
+        case appleScript(String)
+        /// System media keys; they reach the app macOS treats as now playing.
+        case mediaKey
+    }
+
+    static func route(for bundleIdentifier: String?) -> TransportRoute? {
+        guard let id = bundleIdentifier else { return nil }
+        return players.contains(where: { $0.bundleIdentifier == id }) ? .appleScript(id) : .mediaKey
+    }
+
     func perform(_ action: TransportAction) {
-        lastCommandError = nil
+        if lastCommandError != nil { lastCommandError = nil }
         do {
-            try Self.send(action, bundleIdentifier: playerBundleIdentifier,
-                          runningIDs: Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)),
-                          execute: { source in
-                guard let script = NSAppleScript(source: source) else { throw TransportError.failed }
-                var error: NSDictionary?
-                script.executeAndReturnError(&error)
-                if let error { throw NSError(domain: "SmartWindow.Player", code: 1, userInfo: [NSLocalizedDescriptionKey: error[NSAppleScript.errorMessage] as? String ?? "Player command failed. Check Automation permission."]) }
-            }, refresh: poll)
+            switch Self.route(for: playerBundleIdentifier) {
+            case .none:
+                throw TransportError.noSource
+            case .mediaKey:
+                try MediaKeyService.post(action)
+                poll()
+            case .appleScript(let id):
+                try sendAppleScript(action, bundleIdentifier: id)
+            }
         } catch {
             lastCommandError = error.localizedDescription
         }
     }
 
+    private func sendAppleScript(_ action: TransportAction, bundleIdentifier: String) throws {
+        try Self.send(action, bundleIdentifier: bundleIdentifier,
+                      runningIDs: Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)),
+                      execute: { source in
+            guard let script = NSAppleScript(source: source) else { throw TransportError.failed }
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            if let error { throw NSError(domain: "SmartWindow.Player", code: 1, userInfo: [NSLocalizedDescriptionKey: error[NSAppleScript.errorMessage] as? String ?? "Player command failed. Check Automation permission."]) }
+        }, refresh: poll)
+    }
+
     enum TransportError: LocalizedError {
-        case unavailable, failed
+        case unavailable, failed, noSource
         var errorDescription: String? {
             switch self {
+            case .noSource: return "No audio source is available to control."
             case .unavailable: return "The supported player is no longer running."
             case .failed: return "Could not control the player. Check Automation permission."
             }
@@ -162,6 +212,9 @@ final class NowPlayingService: ObservableObject {
     private let pollInterval: TimeInterval = 2.0
     private var artworkURL: URL?
     private var artworkTask: Task<Void, Never>?
+    private var playerSnapshots: [Snapshot] = []
+    private var candidateSources: [AudioSourceInfo] = []
+    private var iconCache: [String: NSImage] = [:]
 
     init() {
         // Delay start to avoid dispatch_once issues during SwiftUI layout
@@ -185,10 +238,30 @@ final class NowPlayingService: ObservableObject {
     }
 
     private func poll() {
-        apply(Self.readSnapshot(using: &compiledScripts))
+        playerSnapshots = Self.readPlayerSnapshots(using: &compiledScripts)
+        let resolved = AudioSourceDetector.currentSources()
+        let deviceActive = resolved == nil && Self.isCoreAudioOutputActive()
+        candidateSources = Self.mergeSources(players: playerSnapshots, resolved: resolved,
+                                             deviceOutputActive: deviceActive, icon: icon(for:))
+        recompute()
     }
 
-    private func apply(_ snapshot: Snapshot) {
+    /// Picks the main source from the last poll and publishes only the values that changed.
+    private func recompute() {
+        if let selected = selectedSourceID, !candidateSources.contains(where: { $0.id == selected }) {
+            selectedSourceID = nil
+        }
+        let mainID = Self.mainSource(selected: selectedSourceID, sources: candidateSources)
+        let sources = candidateSources.map {
+            AudioSourceInfo(id: $0.id, name: $0.name, category: $0.category, icon: $0.icon,
+                            isActive: $0.id == mainID, isPlaying: $0.isPlaying)
+        }
+        if sources != detectedSources { detectedSources = sources }
+        let main = sources.first(where: { $0.id == mainID })
+        apply(Self.snapshot(for: main, players: playerSnapshots), main: main)
+    }
+
+    private func apply(_ snapshot: Snapshot, main: AudioSourceInfo?) {
         if snapshot.isPlaying != isPlaying { isPlaying = snapshot.isPlaying }
         if snapshot.title != trackTitle { trackTitle = snapshot.title }
         if snapshot.artist != artistName { artistName = snapshot.artist }
@@ -196,10 +269,10 @@ final class NowPlayingService: ObservableObject {
         if snapshot.bundleIdentifier != playerBundleIdentifier {
             playerBundleIdentifier = snapshot.bundleIdentifier
         }
-        let activeID = snapshot.bundleIdentifier ?? "com.spotify.client"
-        sourceDisplayName = Self.displayNameForBundleID(activeID)
-        sourceCategory = Self.categoryForBundleID(activeID)
-        detectedSources = Self.collectRunningSources(activeBundleID: snapshot.bundleIdentifier)
+        let name = main?.name ?? "Spotify"
+        let category = main?.category ?? "spotify"
+        if name != sourceDisplayName { sourceDisplayName = name }
+        if category != sourceCategory { sourceCategory = category }
 
         if snapshot.artworkURL != artworkURL {
             artworkURL = snapshot.artworkURL
@@ -207,63 +280,87 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
+    /// App icons are fetched once per bundle id, not on every poll.
+    private func icon(for bundleID: String) -> NSImage? {
+        if let cached = iconCache[bundleID] { return cached }
+        guard let icon = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
+        else { return nil }
+        iconCache[bundleID] = icon
+        return icon
+    }
+
+    // MARK: - Sources
+
+    /// Placeholder source when only device-level output is known (macOS 13).
+    static let systemAudioID = "system-audio"
+
+    /// Running AppleScript players (playing or paused) first, then other apps outputting audio.
+    /// Without per-process data a generic system source stands in for unattributed output.
+    static func mergeSources(players snapshots: [Snapshot], resolved: [AudioSourceDetector.ResolvedSource]?,
+                             deviceOutputActive: Bool, icon: (String) -> NSImage?) -> [AudioSourceInfo] {
+        var sources: [AudioSourceInfo] = snapshots.compactMap { snapshot in
+            guard let id = snapshot.bundleIdentifier else { return nil }
+            let outputting = resolved?.contains(where: { $0.bundleID == id && $0.isPlaying }) ?? false
+            return AudioSourceInfo(id: id, name: displayNameForBundleID(id), category: categoryForBundleID(id),
+                                   icon: icon(id), isActive: false, isPlaying: snapshot.isPlaying || outputting)
+        }
+        if let resolved {
+            for source in resolved where source.isPlaying && !sources.contains(where: { $0.id == source.bundleID }) {
+                sources.append(AudioSourceInfo(id: source.bundleID, name: source.name,
+                                               category: categoryForBundleID(source.bundleID),
+                                               icon: icon(source.bundleID), isActive: false, isPlaying: true))
+            }
+        } else if deviceOutputActive, !snapshots.contains(where: \.isPlaying) {
+            sources.append(AudioSourceInfo(id: systemAudioID, name: "System Audio", category: "media",
+                                           icon: nil, isActive: false, isPlaying: true))
+        }
+        return sources
+    }
+
+    /// Selected source if still detected; otherwise playing AppleScript player, first playing
+    /// source, paused AppleScript player, or nil (idle).
+    static func mainSource(selected: String?, sources: [AudioSourceInfo]) -> String? {
+        if let selected, sources.contains(where: { $0.id == selected }) { return selected }
+        func isPlayer(_ source: AudioSourceInfo) -> Bool {
+            players.contains(where: { $0.bundleIdentifier == source.id })
+        }
+        return sources.first(where: { isPlayer($0) && $0.isPlaying })?.id
+            ?? sources.first(where: \.isPlaying)?.id
+            ?? sources.first(where: isPlayer)?.id
+    }
+
+    /// AppleScript players keep their metadata; other sources only report the app, never a track.
+    static func snapshot(for main: AudioSourceInfo?, players snapshots: [Snapshot]) -> Snapshot {
+        guard let main else { return .idle }
+        if let player = snapshots.first(where: { $0.bundleIdentifier == main.id }) { return player }
+        let title: String
+        switch main.category {
+        case "youtube": title = "Web Audio"
+        case "ghostty": title = "Terminal Audio"
+        default: title = "Playing audio"
+        }
+        return Snapshot(isPlaying: main.isPlaying, title: title, artist: main.name, album: "",
+                        bundleIdentifier: main.id, artworkURL: nil)
+    }
+
     static func categoryForBundleID(_ id: String) -> String {
         let lower = id.lowercased()
         if lower.contains("spotify") { return "spotify" }
-        if lower.contains("chrome") || lower.contains("safari") || lower.contains("browser") || lower.contains("brave") { return "youtube" }
+        let browsers = ["chrome", "safari", "browser", "brave", "firefox", "edgemac", "opera", "vivaldi", "zen"]
+        if browsers.contains(where: lower.contains) { return "youtube" }
         if lower.contains("ghostty") || lower.contains("terminal") || lower.contains("iterm") { return "ghostty" }
         if lower.contains("music") || lower.contains("podcast") { return "music" }
         return "media"
     }
 
     static func displayNameForBundleID(_ id: String) -> String {
-        let lower = id.lowercased()
-        if lower.contains("spotify") { return "Spotify" }
-        if lower.contains("music") { return "Apple Music" }
-        if lower.contains("ghostty") { return "Ghostty" }
-        if lower.contains("iterm") { return "iTerm2" }
-        if lower.contains("terminal") { return "Terminal" }
-        if lower.contains("chrome") { return "Google Chrome" }
-        if lower.contains("safari") { return "Safari" }
-        if lower.contains("arc") { return "Arc" }
-        if lower.contains("brave") { return "Brave" }
-        if lower.contains("vlc") { return "VLC" }
-        if lower.contains("iina") { return "IINA" }
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first,
-           let name = app.localizedName {
-            return name
+        switch id {
+        case "com.spotify.client": return "Spotify"
+        case "com.apple.Music": return "Apple Music"
+        default:
+            return NSRunningApplication.runningApplications(withBundleIdentifier: id).first?.localizedName
+                ?? "Audio Stream"
         }
-        return "Audio Stream"
-    }
-
-    static func collectRunningSources(activeBundleID: String?) -> [AudioSourceInfo] {
-        let knownAppIDs: [(id: String, defaultName: String, category: String)] = [
-            ("com.spotify.client", "Spotify", "spotify"),
-            ("com.apple.Music", "Apple Music", "music"),
-            ("com.mitchellh.ghostty", "Ghostty", "ghostty"),
-            ("com.google.Chrome", "Google Chrome", "youtube"),
-            ("com.apple.Safari", "Safari", "youtube"),
-            ("company.thebrowser.Browser", "Arc", "youtube"),
-            ("org.videolan.vlc", "VLC", "media"),
-            ("com.colliderli.iina", "IINA", "media"),
-            ("com.apple.Terminal", "Terminal", "ghostty"),
-            ("com.googlecode.iterm2", "iTerm2", "ghostty")
-        ]
-        let runningApps = NSWorkspace.shared.runningApplications
-        var sources: [AudioSourceInfo] = []
-        for item in knownAppIDs {
-            if let running = runningApps.first(where: { $0.bundleIdentifier == item.id }) {
-                let icon = running.bundleURL.flatMap { NSWorkspace.shared.icon(forFile: $0.path) }
-                sources.append(AudioSourceInfo(
-                    id: item.id,
-                    name: running.localizedName ?? item.defaultName,
-                    category: item.category,
-                    icon: icon,
-                    isActive: item.id == activeBundleID
-                ))
-            }
-        }
-        return sources
     }
 
     /// Checks via macOS CoreAudio if the default output device is actively playing audio.
@@ -308,58 +405,11 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: - AppleScript
 
-    /// The first running player that is playing wins. Otherwise the first running
-    /// player (paused) is reported so the badge stays while the app is open.
-    /// Only running players are queried so AppleScript never launches them.
-    static func readSnapshot(using cache: inout [String: NSAppleScript]) -> Snapshot {
+    /// Snapshots of running players, playing or paused. Only running players are
+    /// queried so AppleScript never launches them.
+    static func readPlayerSnapshots(using cache: inout [String: NSAppleScript]) -> [Snapshot] {
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        var paused: Snapshot?
-        for player in players where running.contains(player.bundleIdentifier) {
-            guard let snapshot = query(player, cache: &cache) else { continue }
-            if snapshot.isPlaying { return snapshot }
-            if paused == nil { paused = snapshot }
-        }
-
-        // If no dedicated music player is actively playing, inspect system CoreAudio
-        let audioActive = isCoreAudioOutputActive()
-        if audioActive {
-            // Check if a terminal (Ghostty), browser (Chrome/Safari/Arc), or media player is active
-            let candidateIDs = [
-                "com.mitchellh.ghostty",
-                "com.google.Chrome",
-                "com.apple.Safari",
-                "company.thebrowser.Browser",
-                "com.brave.Browser",
-                "org.videolan.vlc",
-                "com.colliderli.iina",
-                "com.googlecode.iterm2",
-                "com.apple.Terminal"
-            ]
-            // Prefer the frontmost app if it's one of the audio apps, otherwise the first running candidate
-            let frontmostID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-            let targetID: String?
-            if let f = frontmostID, candidateIDs.contains(f) {
-                targetID = f
-            } else {
-                targetID = candidateIDs.first(where: { running.contains($0) })
-            }
-
-            if let target = targetID {
-                let appName = displayNameForBundleID(target)
-                let category = categoryForBundleID(target)
-                let streamTitle = category == "ghostty" ? "Terminal Audio Stream" : (category == "youtube" ? "Web Audio Stream" : "Media Playback")
-                return Snapshot(
-                    isPlaying: true,
-                    title: streamTitle,
-                    artist: appName,
-                    album: "CoreAudio Output",
-                    bundleIdentifier: target,
-                    artworkURL: nil
-                )
-            }
-        }
-
-        return paused ?? .idle
+        return players.filter { running.contains($0.bundleIdentifier) }.compactMap { query($0, cache: &cache) }
     }
 
     private static func query(_ player: Player, cache: inout [String: NSAppleScript]) -> Snapshot? {
