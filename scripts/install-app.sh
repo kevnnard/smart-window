@@ -29,6 +29,10 @@ sign_app_bundle() {
     codesign --force --sign "$CODESIGN_IDENTITY" --timestamp --options "$CODESIGN_OPTIONS" \
         "$ADAPTER_BUNDLE_DIR/MediaRemoteAdapter.framework"
 
+    printf 'Signing nested libMediaSessionsHelper.dylib with identity: %s\n' "$CODESIGN_IDENTITY"
+    codesign --force --sign "$CODESIGN_IDENTITY" --timestamp --options "$CODESIGN_OPTIONS" \
+        "$ADAPTER_BUNDLE_DIR/libMediaSessionsHelper.dylib"
+
     printf 'Signing app bundle with identity: %s\n' "$CODESIGN_IDENTITY"
 
     SIGN_ARGS=(
@@ -80,6 +84,9 @@ ADAPTER_BUNDLE_DIR="$APP_BUNDLE/Contents/Resources/MediaRemoteAdapter"
 mkdir -p "$ADAPTER_BUNDLE_DIR"
 cp -R "$ADAPTER_BUILD_DIR/MediaRemoteAdapter.framework" "$ADAPTER_BUNDLE_DIR/"
 cp "$ADAPTER_BUILD_DIR/mediaremote-adapter.pl" "$ADAPTER_BUNDLE_DIR/"
+# Every Now Playing session (S1), read by our own helper in the same perl host.
+cp "$ADAPTER_BUILD_DIR/libMediaSessionsHelper.dylib" "$ADAPTER_BUNDLE_DIR/"
+cp "$ADAPTER_BUILD_DIR/media-sessions.pl" "$ADAPTER_BUNDLE_DIR/"
 
 xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 sign_app_bundle
