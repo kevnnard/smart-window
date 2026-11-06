@@ -1,7 +1,8 @@
 import Foundation
 
-/// Finds the vendored mediaremote-adapter (perl script + framework) and our
-/// media sessions helper (perl runner + dylib) that `scripts/install-app.sh`
+/// Finds the vendored mediaremote-adapter (perl script + framework), our
+/// media sessions helper (perl runner + dylib) and the parent guard that
+/// ends the adapter stream when SmartWindow dies, which `scripts/install-app.sh`
 /// copies into the app bundle, or that `scripts/build-mediaremote-adapter.sh`
 /// leaves in `.build/` for debug runs.
 enum MediaRemoteAdapterLocator {
@@ -9,6 +10,7 @@ enum MediaRemoteAdapterLocator {
     static let frameworkName = "MediaRemoteAdapter.framework"
     static let sessionsRunnerName = "media-sessions.pl"
     static let sessionsHelperName = "libMediaSessionsHelper.dylib"
+    static let parentGuardName = "parent-guard.pl"
 
     /// Absolute, normalized URLs of every helper file, all from one directory.
     struct Files: Equatable {
@@ -16,6 +18,7 @@ enum MediaRemoteAdapterLocator {
         let framework: URL
         let sessionsRunner: URL
         let sessionsHelper: URL
+        let parentGuard: URL
     }
 
     /// Returns absolute, normalized URLs for the first candidate directory that
@@ -40,7 +43,8 @@ enum MediaRemoteAdapterLocator {
     }
 
     /// Same candidate directories and order as `locate`, but a directory only
-    /// matches when the adapter files and the media sessions helper files all exist.
+    /// matches when the adapter files, the media sessions helper files and the
+    /// parent guard all exist.
     static func locateAll(
         bundleResourceURL: URL?,
         executableURL: URL?,
@@ -51,9 +55,10 @@ enum MediaRemoteAdapterLocator {
                 script: dir.appendingPathComponent(scriptName, isDirectory: false),
                 framework: dir.appendingPathComponent(frameworkName, isDirectory: true),
                 sessionsRunner: dir.appendingPathComponent(sessionsRunnerName, isDirectory: false),
-                sessionsHelper: dir.appendingPathComponent(sessionsHelperName, isDirectory: false)
+                sessionsHelper: dir.appendingPathComponent(sessionsHelperName, isDirectory: false),
+                parentGuard: dir.appendingPathComponent(parentGuardName, isDirectory: false)
             )
-            if [files.script, files.framework, files.sessionsRunner, files.sessionsHelper]
+            if [files.script, files.framework, files.sessionsRunner, files.sessionsHelper, files.parentGuard]
                 .allSatisfy({ fileExists($0.path) }) {
                 return files
             }
@@ -61,8 +66,34 @@ enum MediaRemoteAdapterLocator {
         return nil
     }
 
+    /// Same candidate directories and order as `locate`; a directory matches when the
+    /// adapter files and the parent guard exist (the stream never runs unguarded).
+    static func locateStream(
+        bundleResourceURL: URL?,
+        executableURL: URL?,
+        fileExists: (String) -> Bool
+    ) -> (script: URL, framework: URL, parentGuard: URL)? {
+        for dir in candidates(bundleResourceURL: bundleResourceURL, executableURL: executableURL) {
+            let script = dir.appendingPathComponent(scriptName, isDirectory: false)
+            let framework = dir.appendingPathComponent(frameworkName, isDirectory: true)
+            let parentGuard = dir.appendingPathComponent(parentGuardName, isDirectory: false)
+            if fileExists(script.path) && fileExists(framework.path) && fileExists(parentGuard.path) {
+                return (script, framework, parentGuard)
+            }
+        }
+        return nil
+    }
+
     static func current() -> (script: URL, framework: URL)? {
         locate(
+            bundleResourceURL: Bundle.main.resourceURL,
+            executableURL: Bundle.main.executableURL,
+            fileExists: { FileManager.default.fileExists(atPath: $0) }
+        )
+    }
+
+    static func currentStream() -> (script: URL, framework: URL, parentGuard: URL)? {
+        locateStream(
             bundleResourceURL: Bundle.main.resourceURL,
             executableURL: Bundle.main.executableURL,
             fileExists: { FileManager.default.fileExists(atPath: $0) }

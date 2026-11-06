@@ -60,7 +60,7 @@ struct MediaRemoteAdapterLocatorProbe {
             if !value() { throw Failure.check(name) }
         }
         let names = ["mediaremote-adapter.pl", "MediaRemoteAdapter.framework",
-                     "media-sessions.pl", "libMediaSessionsHelper.dylib"]
+                     "media-sessions.pl", "libMediaSessionsHelper.dylib", "parent-guard.pl"]
         let all = Set([bundled, debugAdapter].flatMap { dir in names.map { "\(dir)/\($0)" } })
         let debugOnly = all.filter { $0.hasPrefix(debugAdapter) }
 
@@ -72,6 +72,7 @@ struct MediaRemoteAdapterLocatorProbe {
         try check(appBundle?.sessionsHelper.path == "\(bundled)/libMediaSessionsHelper.dylib", "app bundle sessions helper wins")
         try check(appBundle?.script.path == "\(bundled)/mediaremote-adapter.pl", "app bundle script in locateAll")
         try check(appBundle?.framework.path == "\(bundled)/MediaRemoteAdapter.framework", "app bundle framework in locateAll")
+        try check(appBundle?.parentGuard.path == "\(bundled)/parent-guard.pl", "app bundle parent guard in locateAll")
 
         for executable in [".build/debug/SmartWindow", ".build/arm64-apple-macosx/debug/SmartWindow",
                            ".build/out/Products/Debug/SmartWindow"] {
@@ -81,7 +82,9 @@ struct MediaRemoteAdapterLocatorProbe {
                 fileExists: { debugOnly.contains($0) })
             try check(debug?.sessionsRunner.path == "\(debugAdapter)/media-sessions.pl", "debug sessions runner from \(executable)")
             try check(debug?.sessionsHelper.path == "\(debugAdapter)/libMediaSessionsHelper.dylib", "debug sessions helper from \(executable)")
-            for url in [debug?.script, debug?.framework, debug?.sessionsRunner, debug?.sessionsHelper].compactMap({ $0 }) {
+            try check(debug?.parentGuard.path == "\(debugAdapter)/parent-guard.pl", "debug parent guard from \(executable)")
+            for url in [debug?.script, debug?.framework, debug?.sessionsRunner, debug?.sessionsHelper, debug?.parentGuard]
+                .compactMap({ $0 }) {
                 try check(url.path.hasPrefix("/") && !url.path.contains(".."), "absolute normalized path \(url.path)")
             }
         }
@@ -109,5 +112,24 @@ struct MediaRemoteAdapterLocatorProbe {
         try check(MediaRemoteAdapterLocator.locateAll(
             bundleResourceURL: resources, executableURL: nil,
             fileExists: { adapterOnly.contains($0) }) == nil, "locateAll needs the sessions helper")
+
+        // The stream runs under the parent guard: adapter files plus the guard, no sessions helper needed.
+        let streamFiles = adapterOnly.union(["\(bundled)/parent-guard.pl"])
+        let stream = MediaRemoteAdapterLocator.locateStream(
+            bundleResourceURL: resources, executableURL: nil, fileExists: { streamFiles.contains($0) })
+        try check(stream?.script.path == "\(bundled)/mediaremote-adapter.pl"
+                  && stream?.framework.path == "\(bundled)/MediaRemoteAdapter.framework"
+                  && stream?.parentGuard.path == "\(bundled)/parent-guard.pl", "locateStream finds adapter and guard")
+        try check(MediaRemoteAdapterLocator.locateStream(
+            bundleResourceURL: resources, executableURL: nil,
+            fileExists: { adapterOnly.contains($0) }) == nil, "locateStream needs the parent guard")
+        try check(MediaRemoteAdapterLocator.locateAll(
+            bundleResourceURL: resources, executableURL: nil,
+            fileExists: { all.contains($0) && $0 != "\(bundled)/parent-guard.pl" }) == nil, "locateAll needs the parent guard")
+        let debugStream = MediaRemoteAdapterLocator.locateStream(
+            bundleResourceURL: resources,
+            executableURL: URL(fileURLWithPath: "\(root)/.build/out/Products/Debug/SmartWindow"),
+            fileExists: { debugOnly.contains($0) })
+        try check(debugStream?.parentGuard.path == "\(debugAdapter)/parent-guard.pl", "debug parent guard for the stream")
     }
 }

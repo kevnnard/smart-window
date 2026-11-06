@@ -87,6 +87,8 @@ cp "$ADAPTER_BUILD_DIR/mediaremote-adapter.pl" "$ADAPTER_BUNDLE_DIR/"
 # Every Now Playing session (S1), read by our own helper in the same perl host.
 cp "$ADAPTER_BUILD_DIR/libMediaSessionsHelper.dylib" "$ADAPTER_BUNDLE_DIR/"
 cp "$ADAPTER_BUILD_DIR/media-sessions.pl" "$ADAPTER_BUNDLE_DIR/"
+# Ends the adapter stream when the app exits, even after a crash (S11).
+cp "$ADAPTER_BUILD_DIR/parent-guard.pl" "$ADAPTER_BUNDLE_DIR/"
 
 xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 sign_app_bundle

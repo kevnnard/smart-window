@@ -58,18 +58,46 @@ struct MediaSessionsClientProbe {
         // Artwork semantics across lines: unchanged keeps bytes, null removes, string replaces
         let second = line("""
         {"current":"com.apple.Music","sessions":[\
-        {"bundleIdentifier":"company.thebrowser.dia","title":"Video","playing":false,"artworkUnchanged":true},\
-        {"bundleIdentifier":"com.apple.Music","title":"Next","playing":true,"artworkData":null},\
-        {"bundleIdentifier":"com.spotify.client","title":"Mathematics","playing":false,"artworkData":"\(diaArt.base64EncodedString())"}]}
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":1263,"title":"Video","playing":false,"artworkUnchanged":true},\
+        {"bundleIdentifier":"com.apple.Music","processIdentifier":54540,"title":"Next","playing":true,"artworkData":null},\
+        {"bundleIdentifier":"com.spotify.client","processIdentifier":46909,"title":"Mathematics","playing":false,"artworkData":"\(diaArt.base64EncodedString())"}]}
         """)
-        guard let two = Client.parse(line: second, previousArtwork: one.artworkByBundleID)
+        guard let two = Client.parse(line: second, previousArtwork: one.artworkBySession)
         else { throw Failure.check("second line parsed") }
         try check(two.current == "com.apple.Music", "current changed")
         try check(two.sessions[0].artworkData == diaArt, "artworkUnchanged keeps the previous bytes")
         try check(two.sessions[1].artworkData == nil, "null artwork removes it")
         try check(two.sessions[2].artworkData == diaArt, "string artwork replaces the bytes")
-        try check(two.artworkByBundleID == ["company.thebrowser.dia": diaArt, "com.spotify.client": diaArt],
-                  "artwork state carried per bundle id")
+        try check(two.artworkBySession == ["company.thebrowser.dia|1263": diaArt, "com.spotify.client|46909": diaArt],
+                  "artwork state carried per bundle id and process")
+
+        // Two sessions of one app (same bundle id, different PIDs) never swap artwork
+        let tabs = line("""
+        {"current":"company.thebrowser.dia","sessions":[\
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":100,"title":"A","artworkData":"\(musicArt.base64EncodedString())"},\
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":200,"title":"B","artworkData":"\(spotifyArt.base64EncodedString())"}]}
+        """)
+        guard let tabsOne = Client.parse(line: tabs, previousArtwork: [:]) else { throw Failure.check("two-tab line parsed") }
+        try check(tabsOne.artworkBySession == ["company.thebrowser.dia|100": musicArt, "company.thebrowser.dia|200": spotifyArt],
+                  "artwork kept per process for one bundle id")
+        let tabsSwapped = line("""
+        {"current":"company.thebrowser.dia","sessions":[\
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":200,"title":"B","artworkUnchanged":true},\
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":100,"title":"A","artworkData":"\(diaArt.base64EncodedString())"}]}
+        """)
+        let tabsTwo = Client.parse(line: tabsSwapped, previousArtwork: tabsOne.artworkBySession)
+        try check(tabsTwo?.sessions.map(\.processIdentifier) == [200, 100], "both sessions of one app listed")
+        try check(tabsTwo?.sessions[0].artworkData == spotifyArt, "artworkUnchanged keeps that process's own artwork")
+        try check(tabsTwo?.sessions[1].artworkData == diaArt, "new artwork replaces only its own process")
+        let tabsSilent = Client.parse(line: line("""
+        {"current":null,"sessions":[{"bundleIdentifier":"company.thebrowser.dia","processIdentifier":100,"title":"A"},\
+        {"bundleIdentifier":"company.thebrowser.dia","processIdentifier":300,"title":"C","artworkUnchanged":true}]}
+        """), previousArtwork: tabsOne.artworkBySession)
+        try check(tabsSilent?.sessions[0].artworkData == musicArt, "no artwork keys keeps that process's artwork")
+        try check(tabsSilent?.sessions[1].artworkData == nil, "a new process of the same app does not inherit artwork")
+        try check(SessionsSnapshot.artworkKey(bundleIdentifier: "x.y", processIdentifier: 7) == "x.y|7"
+                  && SessionsSnapshot.artworkKey(bundleIdentifier: "x.y", processIdentifier: nil) == "x.y",
+                  "artwork key is bundle id and PID, bundle id alone without PID")
         let unknown = Client.parse(line: line(#"{"current":null,"sessions":[{"bundleIdentifier":"x.y","artworkUnchanged":true}]}"#),
                                    previousArtwork: [:])
         try check(unknown?.sessions.first?.artworkData == nil && unknown?.current == nil,

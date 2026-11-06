@@ -80,6 +80,10 @@ struct MediaRemoteAdapterClientProbe {
         let framework = URL(fileURLWithPath: "/A/MediaRemoteAdapter.framework")
         try check(Client.streamArguments(script: script, framework: framework)
                   == ["/A/mediaremote-adapter.pl", "/A/MediaRemoteAdapter.framework", "stream", "--debounce=100"], "stream arguments")
+        let parentGuard = URL(fileURLWithPath: "/A/parent-guard.pl")
+        try check(Client.guardedStreamArguments(parentGuard: parentGuard, parentPID: 4242, script: script, framework: framework)
+                  == ["/A/parent-guard.pl", "4242", "/usr/bin/perl", "/A/mediaremote-adapter.pl",
+                      "/A/MediaRemoteAdapter.framework", "stream", "--debounce=100"], "stream runs under the parent guard")
         try check(Client.sendArguments(script: script, framework: framework, command: .togglePlayPause)
                   == ["/A/mediaremote-adapter.pl", "/A/MediaRemoteAdapter.framework", "send", "2"], "send arguments")
         try check(Client.AdapterError.exit(3).localizedDescription == "Could not reach the Now Playing service (exit 3).", "send failure message")
@@ -106,8 +110,62 @@ struct MediaRemoteAdapterClientProbe {
         try check(Client.AdapterError.invalidOutput.localizedDescription
                   == "Could not read the Now Playing service's answer. Nothing was sent.", "invalid output message")
 
+        try runRegistry()
+
         // Backoff
         try check((0..<6).map(Client.backoffDelay(attempt:)) == [2, 5, 15, 15, 15, 15], "backoff schedule capped")
         try check(Client.backoffDelay(attempt: -1) == 2, "negative attempt clamps to first delay")
+    }
+
+    /// Fake command for the registry; `terminated` is only changed under the registry lock.
+    final class FakeCommand { var terminated = 0 }
+
+    static func runRegistry() throws {
+        func check(_ value: @autoclosure () -> Bool, _ name: String) throws {
+            if !value() { throw Failure.check(name) }
+        }
+        let registry = CommandRegistry<FakeCommand>(terminate: { $0.terminated += 1 })
+        let start = registry.epoch
+        let first = FakeCommand()
+        try check(registry.register(first, epoch: start), "registers while the epoch is current")
+        try check(registry.count == 1 && registry.isCurrent(epoch: start), "registered and current")
+        registry.cancelAll()
+        try check(first.terminated == 1, "cancelAll terminates the registered command")
+        try check(!registry.isCurrent(epoch: start), "cancelAll changes the epoch")
+        let late = FakeCommand()
+        try check(!registry.register(late, epoch: start), "a command from before cancelAll is refused")
+        try check(late.terminated == 0 && registry.count == 1, "a refused command is not tracked")
+        registry.remove(first)
+        try check(registry.count == 0, "finished command removed")
+        let next = registry.epoch
+        let fresh = FakeCommand()
+        try check(registry.register(fresh, epoch: next) && registry.count == 1, "a new epoch registers again")
+        registry.remove(fresh)
+
+        // Registration and cancellation are atomic: under contention every command that was
+        // accepted with the old epoch is terminated by the one cancelAll, and none is missed.
+        for _ in 0..<50 {
+            let contended = CommandRegistry<FakeCommand>(terminate: { $0.terminated += 1 })
+            let epoch = contended.epoch
+            let commands = (0..<64).map { _ in FakeCommand() }
+            var accepted = [Bool](repeating: false, count: commands.count)
+            let group = DispatchGroup()
+            let lock = NSLock()
+            for (index, command) in commands.enumerated() {
+                DispatchQueue.global().async(group: group) {
+                    let ok = contended.register(command, epoch: epoch)
+                    lock.lock(); accepted[index] = ok; lock.unlock()
+                }
+                if index == commands.count / 2 {
+                    DispatchQueue.global().async(group: group) { contended.cancelAll() }
+                }
+            }
+            group.wait()
+            for (index, command) in commands.enumerated() {
+                try check(accepted[index] == (command.terminated == 1),
+                          "accepted commands are terminated, refused ones are not")
+            }
+            try check(contended.count == accepted.filter { $0 }.count, "only accepted commands are tracked")
+        }
     }
 }

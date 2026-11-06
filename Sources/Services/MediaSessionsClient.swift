@@ -66,13 +66,23 @@ struct SessionsSnapshot: Equatable {
     var current: String?
     var sessions: [MediaSession]
 
-    /// Artwork bytes per session bundle id, carried into the next line's `artworkUnchanged`.
-    var artworkByBundleID: [String: Data] {
+    /// Artwork bytes per session (`artworkKey`), carried into the next line's `artworkUnchanged`.
+    var artworkBySession: [String: Data] {
         var result: [String: Data] = [:]
         for session in sessions {
-            if let data = session.artworkData { result[session.bundleIdentifier] = data }
+            if let data = session.artworkData {
+                result[Self.artworkKey(bundleIdentifier: session.bundleIdentifier,
+                                       processIdentifier: session.processIdentifier)] = data
+            }
         }
         return result
+    }
+
+    /// Same session identity as the helper's artwork tracking: bundle id and process id, so two
+    /// sessions of one app never swap artwork. The bundle id alone when the PID is missing.
+    static func artworkKey(bundleIdentifier: String, processIdentifier: Int?) -> String {
+        guard let processIdentifier else { return bundleIdentifier }
+        return "\(bundleIdentifier)|\(processIdentifier)"
     }
 }
 
@@ -254,7 +264,8 @@ final class MediaSessionsClient: ObservableObject {
     }
 
     /// Parses one helper line `{current, sessions[]}`. Artwork: a string is new bytes, null removes
-    /// them, `artworkUnchanged` keeps `previousArtwork[bundleIdentifier]`. Returns nil for lines to
+    /// them, `artworkUnchanged` keeps `previousArtwork[artworkKey]` (bundle id + PID, as the helper
+    /// tracks it). Returns nil for lines to
     /// ignore (non-JSON, not an object, `sessions` not an array, `current` not a string or null);
     /// session entries without a bundle id string are skipped and fields of the wrong type are nil.
     nonisolated static func parse(line: Data, previousArtwork: [String: Data]) -> SessionsSnapshot? {
@@ -291,13 +302,15 @@ final class MediaSessionsClient: ObservableObject {
             session.playbackRate = number("playbackRate")
             if let value = entry["playing"] as? NSNumber, isBoolean(value) { session.playing = value.boolValue }
             session.artworkMimeType = string("artworkMimeType")
+            let artworkKey = SessionsSnapshot.artworkKey(bundleIdentifier: bundle,
+                                                         processIdentifier: session.processIdentifier)
             if (entry["artworkUnchanged"] as? NSNumber)?.boolValue == true {
-                session.artworkData = previousArtwork[bundle]
+                session.artworkData = previousArtwork[artworkKey]
             } else if let text = entry["artworkData"] as? String {
                 session.artworkData = Data(base64Encoded: text)
             } else if entry["artworkData"] == nil {
                 // Neither key: nothing new was reported, keep what was shown.
-                session.artworkData = previousArtwork[bundle]
+                session.artworkData = previousArtwork[artworkKey]
             }
             sessions.append(session)
         }
@@ -346,7 +359,7 @@ private final class SessionsLineReader: @unchecked Sendable {
             buffer = Data(buffer[(newline + 1)...])
             scanned = 0
             guard let snapshot = MediaSessionsClient.parse(line: line, previousArtwork: artwork) else { continue }
-            artwork = snapshot.artworkByBundleID
+            artwork = snapshot.artworkBySession
             onSnapshot(snapshot)
         }
         scanned = buffer.count

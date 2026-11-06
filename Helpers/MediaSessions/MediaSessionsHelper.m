@@ -158,6 +158,9 @@ static NSString *currentBundleIdentifier(void) {
 // Reads info and playing state for every client concurrently, waiting at
 // most MS_TIMEOUT_MILLIS for the answers. Returns one entry per client with
 // optional "request", "info" (NSDictionary) and "playing" (NSNumber) values.
+// Threading: an entry is complete ("client", "request") before the first
+// request is issued; from then on only completions on gQueue mutate it, and
+// it is read only on gQueue (the snapshot below).
 static NSArray<NSDictionary *> *readSessions(NSArray *clients) {
     SEL infoSelector = sel_registerName("requestNowPlayingInfoOnQueue:completion:");
     SEL playingSelector = sel_registerName("requestIsPlayingOnQueue:completion:");
@@ -172,6 +175,7 @@ static NSArray<NSDictionary *> *readSessions(NSArray *clients) {
         if (request == nil) {
             continue;
         }
+        entry[@"request"] = request;
         if ([request respondsToSelector:infoSelector]) {
             dispatch_semaphore_t done = dispatch_semaphore_create(0);
             [waits addObject:done];
@@ -182,7 +186,6 @@ static NSArray<NSDictionary *> *readSessions(NSArray *clients) {
               dispatch_semaphore_signal(done);
             });
         }
-        entry[@"request"] = request;
         if ([request respondsToSelector:playingSelector]) {
             dispatch_semaphore_t done = dispatch_semaphore_create(0);
             [waits addObject:done];

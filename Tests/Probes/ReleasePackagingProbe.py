@@ -61,6 +61,7 @@ esac
         self.assertTrue((adapter / "MediaRemoteAdapter.framework/MediaRemoteAdapter").exists())
         self.assertTrue((adapter / "MediaRemoteAdapter.framework/Versions/Current").is_symlink())
         self.assertTrue((adapter / "media-sessions.pl").is_file())
+        self.assertTrue((adapter / "parent-guard.pl").is_file())
         helper = adapter / "libMediaSessionsHelper.dylib"
         self.assertTrue(helper.is_file())
         archs = subprocess.run(["lipo", "-archs", str(helper)], capture_output=True, text=True)

@@ -3,7 +3,8 @@
 # Mirrors the MediaRemoteAdapter target in Vendor/mediaremote-adapter/CMakeLists.txt:
 # same sources, -fobjc-arc -fvisibility=default, Foundation/AppKit/UniformTypeIdentifiers,
 # a versioned framework bundle (Versions/A) and an ad-hoc signature.
-# Also builds our own media sessions helper (Helpers/MediaSessions) next to it.
+# Also builds our own media sessions helper (Helpers/MediaSessions) next to it,
+# and copies the parent guard that ends the adapter stream when SmartWindow dies (S11).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,7 +53,7 @@ SDK="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" || fail "macOS SDK not f
 for src in "${SOURCES[@]}"; do
     [ -f "$VENDOR_DIR/$src" ] || fail "vendored source missing: $VENDOR_DIR/$src"
 done
-for src in MediaSessionsHelper.m media-sessions.pl; do
+for src in MediaSessionsHelper.m media-sessions.pl parent-guard.pl; do
     [ -f "$HELPER_DIR/$src" ] || fail "media sessions helper source missing: $HELPER_DIR/$src"
 done
 
@@ -136,5 +137,7 @@ rm -f "$HELPER_DYLIB"
 codesign --force --sign - "$HELPER_DYLIB" >/dev/null 2>&1 || fail "ad-hoc signing of libMediaSessionsHelper.dylib failed"
 cp "$HELPER_DIR/media-sessions.pl" "$OUT_DIR/media-sessions.pl"
 chmod 755 "$OUT_DIR/media-sessions.pl"
+cp "$HELPER_DIR/parent-guard.pl" "$OUT_DIR/parent-guard.pl"
+chmod 755 "$OUT_DIR/parent-guard.pl"
 
 printf 'Built %s\n' "$HELPER_DYLIB"

@@ -35,6 +35,7 @@ public struct NowPlayingInfo: Equatable {
 /// Runs `mediaremote-adapter.pl stream` under `/usr/bin/perl` and publishes the Now Playing session,
 /// and sends commands to the Now Playing app. The stream is only the fallback reader while the media
 /// sessions helper is unavailable; it is restarted with backoff when it exits or stays silent at startup.
+/// The stream runs under `parent-guard.pl`, which ends it when SmartWindow exits, even after a crash.
 @MainActor
 final class MediaRemoteAdapterClient: ObservableObject {
 
@@ -77,7 +78,9 @@ final class MediaRemoteAdapterClient: ObservableObject {
     /// Grace period after `terminate()` before a command process is killed.
     nonisolated static let killGrace: TimeInterval = 1
     /// Running `get`/`send` processes, terminated by `stop()` and on app termination.
-    nonisolated static let commandProcesses = CommandProcesses()
+    nonisolated static let commandProcesses = CommandRegistry<Process>(terminate: { process in
+        if process.isRunning { process.terminate() }
+    })
 
     private var process: Process?
     /// Incremented on every start/stop so callbacks from an older process are ignored.
@@ -90,7 +93,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     deinit {
         process?.terminate()
-        Self.commandProcesses.terminateAll()
+        Self.commandProcesses.cancelAll()
     }
 
     // MARK: Lifecycle
@@ -119,7 +122,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
         terminationObserver = nil
         terminateProcess()
-        Self.commandProcesses.terminateAll()
+        Self.commandProcesses.cancelAll()
         markUnavailable()
     }
 
@@ -136,7 +139,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
     private func launch() {
         generation += 1
         let current = generation
-        guard let adapter = MediaRemoteAdapterLocator.current() else {
+        guard let adapter = MediaRemoteAdapterLocator.currentStream() else {
             markUnavailable()
             scheduleRestart()
             return
@@ -144,7 +147,9 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
         let process = Process()
         process.executableURL = Self.perlURL
-        process.arguments = Self.streamArguments(script: adapter.script, framework: adapter.framework)
+        process.arguments = Self.guardedStreamArguments(parentGuard: adapter.parentGuard,
+                                                        parentPID: ProcessInfo.processInfo.processIdentifier,
+                                                        script: adapter.script, framework: adapter.framework)
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -248,7 +253,7 @@ final class MediaRemoteAdapterClient: ObservableObject {
                                                 check: [String], send: [String]) -> AdapterError? {
         let epoch = commandProcesses.epoch
         let current: NowPlayingInfo?
-        switch run(arguments: check, timeout: ownerCheckTimeout, captureOutput: true) {
+        switch run(arguments: check, timeout: ownerCheckTimeout, captureOutput: true, epoch: epoch) {
         case .failure(let error): return error
         case .success(let output):
             do { current = try getOutputInfo(output) } catch { return .invalidOutput }
@@ -256,17 +261,20 @@ final class MediaRemoteAdapterClient: ObservableObject {
         guard shouldSend(expectedOwner: expectedOwner, currentInfo: current) else {
             return .notNowPlaying(appName: appName)
         }
-        // `stop()` ran during the check: the client is shutting down.
-        guard commandProcesses.epoch == epoch else { return .unavailable }
-        if case .failure(let error) = run(arguments: send, timeout: sendTimeout, captureOutput: false) { return error }
+        // `stop()` ran during the check: the client is shutting down. `run` refuses to start the
+        // send under a changed epoch too, so this only skips the work early.
+        guard commandProcesses.isCurrent(epoch: epoch) else { return .unavailable }
+        if case .failure(let error) = run(arguments: send, timeout: sendTimeout, captureOutput: false,
+                                          epoch: epoch) { return error }
         return nil
     }
 
     /// Runs perl with the arguments and waits up to `timeout`. Succeeds with stdout (empty unless
     /// `captureOutput`) on exit status 0. On timeout the process is terminated, then killed if it
-    /// is still running after `killGrace`. The process is tracked while it runs so `stop()` ends it.
+    /// is still running after `killGrace`. The process is registered under `epoch` before it starts,
+    /// so `stop()` either refuses it (`.unavailable`, never started) or terminates it.
     nonisolated static func run(arguments: [String], timeout: TimeInterval,
-                                captureOutput: Bool) -> Result<Data, AdapterError> {
+                                captureOutput: Bool, epoch: Int) -> Result<Data, AdapterError> {
         let process = Process()
         process.executableURL = perlURL
         process.arguments = arguments
@@ -302,18 +310,29 @@ final class MediaRemoteAdapterClient: ObservableObject {
             clearPipe()
         }
 
+        func end() {
+            process.terminate()
+            if finished.wait(timeout: .now() + killGrace) != .success, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+
+        // Registered before `run()`: a `stop()` from here on either sees it in the set or has
+        // already changed the epoch, which the check after `run()` catches.
+        guard commandProcesses.register(process, epoch: epoch) else { return .failure(.unavailable) }
         do {
             try process.run()
         } catch {
             return .failure(.launch(error.localizedDescription))
         }
-        commandProcesses.insert(process)
+        // `stop()` ran while the process was starting, before it could be terminated.
+        guard commandProcesses.isCurrent(epoch: epoch) else {
+            end()
+            return .failure(.unavailable)
+        }
 
         guard finished.wait(timeout: .now() + timeout) == .success else {
-            process.terminate()
-            if finished.wait(timeout: .now() + killGrace) != .success, process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
-            }
+            end()
             return .failure(.timeout)
         }
         guard process.terminationStatus == 0 else { return .failure(.exit(process.terminationStatus)) }
@@ -338,6 +357,13 @@ final class MediaRemoteAdapterClient: ObservableObject {
 
     nonisolated static func streamArguments(script: URL, framework: URL) -> [String] {
         [script.path, framework.path, "stream", "--debounce=100"]
+    }
+
+    /// perl arguments that run the stream as a child of `parent-guard.pl`, which watches
+    /// `parentPID` (SmartWindow) and ends the stream when it is gone.
+    nonisolated static func guardedStreamArguments(parentGuard: URL, parentPID: Int32,
+                                                   script: URL, framework: URL) -> [String] {
+        [parentGuard.path, String(parentPID), perlURL.path] + streamArguments(script: script, framework: framework)
     }
 
     nonisolated static func sendArguments(script: URL, framework: URL, command: Command) -> [String] {
@@ -426,39 +452,57 @@ final class MediaRemoteAdapterClient: ObservableObject {
     }
 }
 
-// MARK: - CommandProcesses
+// MARK: - CommandRegistry
 
-/// Lock-protected set of running command processes, shared by the background command queue
-/// and the main-actor shutdown path.
-final class CommandProcesses: @unchecked Sendable {
+/// Lock-protected set of running commands, shared by the background command queue and the
+/// main-actor shutdown path. Registration and cancellation take the same lock, so a command is
+/// either refused (registered under an old epoch) or tracked before `cancelAll()` runs.
+final class CommandRegistry<Item: AnyObject>: @unchecked Sendable {
     private let lock = NSLock()
-    private var processes: [ObjectIdentifier: Process] = [:]
-    private var terminations = 0
+    private var items: [ObjectIdentifier: Item] = [:]
+    private var cancellations = 0
+    private let terminate: (Item) -> Void
 
-    /// Changes on every `terminateAll()`, so a command can tell it was cancelled between steps.
+    /// `terminate` is called under the registry lock and must not call back into the registry.
+    init(terminate: @escaping (Item) -> Void) {
+        self.terminate = terminate
+    }
+
+    /// Changes on every `cancelAll()`, so a command can tell it was cancelled between steps.
     var epoch: Int {
         lock.lock(); defer { lock.unlock() }
-        return terminations
+        return cancellations
     }
 
-    func insert(_ process: Process) {
+    var count: Int {
         lock.lock(); defer { lock.unlock() }
-        processes[ObjectIdentifier(process)] = process
+        return items.count
     }
 
-    func remove(_ process: Process) {
+    func isCurrent(epoch: Int) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        processes.removeValue(forKey: ObjectIdentifier(process))
+        return cancellations == epoch
     }
 
-    /// Terminates every tracked process. Each `run` call still waits for its own process,
-    /// kills it if needed, and removes it from the set.
-    func terminateAll() {
-        lock.lock()
-        terminations += 1
-        let running = Array(processes.values)
-        lock.unlock()
-        for process in running where process.isRunning { process.terminate() }
+    /// Tracks `item` only while `epoch` is current; false means `cancelAll()` already ran.
+    func register(_ item: Item, epoch: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard cancellations == epoch else { return false }
+        items[ObjectIdentifier(item)] = item
+        return true
+    }
+
+    func remove(_ item: Item) {
+        lock.lock(); defer { lock.unlock() }
+        items.removeValue(forKey: ObjectIdentifier(item))
+    }
+
+    /// Starts a new epoch and terminates every tracked command. Each `run` call still waits for
+    /// its own process, kills it if needed, and removes it from the set.
+    func cancelAll() {
+        lock.lock(); defer { lock.unlock() }
+        cancellations += 1
+        for item in items.values { terminate(item) }
     }
 }
 
