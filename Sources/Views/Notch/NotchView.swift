@@ -14,6 +14,8 @@ struct NotchLayout: Equatable {
     var customHeight: CGFloat = CGFloat(AppSettings.notchDefaultHeight)
 
     static let bottomPadding: CGFloat = 6
+    static let expandedCardHeight: CGFloat = 180
+    static let expandedMinWidth: CGFloat = 440
 
     var hasNotch: Bool { notchWidth > 0 }
 
@@ -37,6 +39,13 @@ struct NotchLayout: Equatable {
         CGSize(width: contentWidth, height: barHeight + Self.bottomPadding)
     }
 
+    /// Window size for the compact pill or the expanded card. Shared by the view and the
+    /// controller so the panel frame and the rendered content cannot diverge.
+    func panelSize(expanded: Bool) -> CGSize {
+        guard expanded else { return panelSize }
+        return CGSize(width: max(contentWidth, Self.expandedMinWidth), height: Self.expandedCardHeight + Self.bottomPadding)
+    }
+
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
         let width = customWidth ?? CGFloat(AppSettings.shared.notchCustomWidth)
         let height = customHeight ?? CGFloat(AppSettings.shared.notchCustomHeight)
@@ -48,6 +57,22 @@ struct NotchLayout: Equatable {
         }
         let notch = screen.frame.width - left.width - right.width
         return NotchLayout(notchWidth: max(0, notch.rounded()), physicalBarHeight: inset, customWidth: width, customHeight: height)
+    }
+}
+
+// MARK: - Primary display
+
+extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    }
+
+    /// The menu bar display. `NSScreen.main` follows the key window, so it is not used here.
+    static var primary: NSScreen? { screens.first }
+
+    var isPrimary: Bool {
+        guard let id = displayID else { return false }
+        return id == NSScreen.primary?.displayID
     }
 }
 
@@ -136,13 +161,24 @@ struct NotchView: View {
     let layout: NotchLayout
     var screen: NSScreen? = nil
     var displayKey: String? = nil
-    var onExpandChange: ((Bool) -> Void)? = nil
+    @ObservedObject var panelState: NotchPanelState
     @ObservedObject private var displayPreferences = DisplayPreferences.shared
     static let sourcePillWidth: CGFloat = 64
     static let sourcePillHeight: CGFloat = 20
     static let sourceBadgeMaxWidth: CGFloat = 160
-    @State private var isExpanded = false
-    @State private var isHovering = false
+    static let maxVisibleSources = 3
+
+    private var isExpanded: Bool { panelState.isExpanded }
+
+    /// First `max` sources, with the main source moved to the front when it would be hidden.
+    nonisolated static func visibleSources(_ all: [AudioSourceInfo], max: Int) -> [AudioSourceInfo] {
+        let limit = Swift.max(0, max)
+        let head = Array(all.prefix(limit))
+        guard limit > 0,
+              let active = all.first(where: { $0.isActive }),
+              !head.contains(where: { $0.id == active.id }) else { return head }
+        return [active] + head.prefix(limit - 1)
+    }
 
     private var currentLayout: NotchLayout {
         if let screen = screen {
@@ -158,12 +194,8 @@ struct NotchView: View {
 
     private var isVisible: Bool {
         let isMainOnly = !settings.notchShowOnAllDisplays
-        if isMainOnly, let screen = screen, let main = NSScreen.main {
-            let screenID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-            let mainID = main.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-            if screenID != mainID {
-                return false
-            }
+        if isMainOnly, let screen = screen, !screen.isPrimary {
+            return false
         }
         let displayAllowed = displayPreferences.nowPlayingVisible(on: displayKey)
         if settings.notchAlwaysVisible {
@@ -200,9 +232,8 @@ struct NotchView: View {
 
     var body: some View {
         let activeLayout = currentLayout
-        let cardWidth = max(activeLayout.contentWidth, 440)
-        let activeWidth = isExpanded ? cardWidth : activeLayout.contentWidth
-        let activeHeight = isExpanded ? 180 : activeLayout.barHeight
+        let cardWidth = activeLayout.panelSize(expanded: true).width
+        let activeSize = activeLayout.panelSize(expanded: isExpanded)
 
         ZStack(alignment: .top) {
             if isVisible {
@@ -216,33 +247,22 @@ struct NotchView: View {
                         .clipShape(BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14))
                         .overlay(
                             BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14)
-                                .stroke(isHovering ? Color.white.opacity(0.28) : Color.white.opacity(0.12), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
                         )
-                        .shadow(color: .black.opacity(isHovering ? 0.55 : 0.35), radius: isHovering ? 6 : 4, y: 2)
+                        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
                         .contentShape(Rectangle())
-                        .onHover { hovering in
-                            isHovering = hovering
-                            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                        }
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                isExpanded = true
-                                onExpandChange?(true)
-                            }
-                        }
+                        // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
+                        .onTapGesture { panelState.expand() }
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }
-        .frame(width: activeWidth, height: activeHeight + NotchLayout.bottomPadding, alignment: .top)
+        .frame(width: activeSize.width, height: activeSize.height, alignment: .top)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isVisible)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
         .animation(.easeInOut(duration: 0.2), value: nowPlaying.isPlaying)
         .onChange(of: isVisible) { visible in
-            if !visible && isExpanded {
-                isExpanded = false
-                onExpandChange?(false)
-            }
+            if !visible { panelState.collapse() }
         }
     }
 
@@ -370,9 +390,9 @@ struct NotchView: View {
 
                 // Multi-app selector pills
                 HStack(spacing: 5) {
-                    ForEach(nowPlaying.detectedSources.prefix(3)) { source in
+                    ForEach(Self.visibleSources(nowPlaying.detectedSources, max: Self.maxVisibleSources)) { source in
                         Button {
-                            nowPlaying.openSource(source.id)
+                            nowPlaying.selectSource(source.id)
                         } label: {
                             HStack(spacing: 3) {
                                 if let icon = source.icon {
@@ -396,10 +416,7 @@ struct NotchView: View {
                     }
 
                     Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            isExpanded = false
-                            onExpandChange?(false)
-                        }
+                        panelState.collapse()
                     } label: {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 10, weight: .bold))
@@ -485,6 +502,8 @@ struct NotchView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .disabled(!nowPlaying.canControl)
+                .opacity(nowPlaying.canControl ? 1 : 0.4)
 
                 // Playback state. The service exposes no position or duration, so no scrubber is shown.
                 HStack(spacing: 8) {
@@ -507,7 +526,7 @@ struct NotchView: View {
             }
         }
         .padding(16)
-        .frame(width: width, height: 180)
+        .frame(width: width, height: NotchLayout.expandedCardHeight)
         .background(Color.black.opacity(0.94))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(

@@ -6,6 +6,9 @@ import Combine
 final class NotchController: NSObject, ObservableObject {
     /// Panels for each screen - keyed by screen's unique identifier
     private var panels: [CGDirectDisplayID: NotchOverlayWindow] = [:]
+    /// Expanded state of each panel; the single source of truth for its size.
+    private var panelStates: [CGDirectDisplayID: NotchPanelState] = [:]
+    private var panelObservers: [CGDirectDisplayID: AnyCancellable] = [:]
     
     /// Shared NowPlayingService so all notch windows show the same info
     private let nowPlayingService = NowPlayingService()
@@ -51,13 +54,12 @@ final class NotchController: NSObject, ObservableObject {
 
     private func refreshVisibility() {
         let isMainOnly = !AppSettings.shared.notchShowOnAllDisplays
-        let mainDisplayID = NSScreen.main?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
 
         for screen in NSScreen.screens {
-            guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+            guard let id = screen.displayID,
                   let panel = panels[id] else { continue }
 
-            if isMainOnly && id != mainDisplayID {
+            if isMainOnly && !screen.isPrimary {
                 panel.orderOut(nil)
                 continue
             }
@@ -85,6 +87,8 @@ final class NotchController: NSObject, ObservableObject {
     private func createPanels() {
         // Remove existing panels first
         panels.removeAll()
+        panelStates.removeAll()
+        panelObservers.removeAll()
         
         // Safety check: ensure screens are available
         guard !NSScreen.screens.isEmpty else {
@@ -100,7 +104,7 @@ final class NotchController: NSObject, ObservableObject {
                 continue
             }
             
-            let panel = makePanel(for: screen)
+            let panel = makePanel(for: screen, displayID: displayID)
             panels[displayID] = panel
             
             // Position this panel on its screen
@@ -142,6 +146,8 @@ final class NotchController: NSObject, ObservableObject {
         for displayID in existingPanels.subtracting(currentScreens) {
             panels[displayID]?.orderOut(nil)
             panels.removeValue(forKey: displayID)
+            panelStates.removeValue(forKey: displayID)
+            panelObservers.removeValue(forKey: displayID)
         }
         
         // Add panels for newly connected screens
@@ -151,7 +157,7 @@ final class NotchController: NSObject, ObservableObject {
             }
             
             if panels[displayID] == nil {
-                let panel = makePanel(for: screen)
+                let panel = makePanel(for: screen, displayID: displayID)
                 panels[displayID] = panel
             }
             
@@ -175,62 +181,109 @@ final class NotchController: NSObject, ObservableObject {
     }
     
     /// Builds a panel sized to the screen's notch geometry. All panels share the same NowPlayingService.
-    private func makePanel(for screen: NSScreen) -> NotchOverlayWindow {
+    private func makePanel(for screen: NSScreen, displayID: CGDirectDisplayID) -> NotchOverlayWindow {
         let layout = NotchLayout.forScreen(screen)
+        let state = NotchPanelState()
         let panel = NotchOverlayWindow(
-            contentRect: NSRect(origin: .zero, size: layout.panelSize),
+            contentRect: NSRect(origin: .zero, size: layout.panelSize(expanded: false)),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(
+        panel.contentView = NotchHostingView(
             rootView: NotchView(
                 nowPlaying: nowPlayingService,
                 layout: layout,
                 screen: screen,
                 displayKey: DisplayIdentity.key(for: screen),
-                onExpandChange: { [weak self] expanded in
-                    self?.setExpanded(expanded, on: screen)
-                }
-            )
+                panelState: state
+            ),
+            panelState: state
         )
+        panelStates[displayID] = state
+        // @Published emits on willSet, so the new value is passed explicitly.
+        panelObservers[displayID] = state.$isExpanded
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] expanded in
+                guard let self,
+                      let panel = self.panels[displayID],
+                      let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else { return }
+                self.positionPanel(panel, on: screen, expanded: expanded, animated: true)
+            }
         return panel
     }
 
-    /// Dynamically expands or collapses the panel window frame to match the Dynamic Island state.
-    func setExpanded(_ expanded: Bool, on screen: NSScreen) {
-        guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
-              let panel = panels[displayID] else { return }
-
+    /// Positions a panel centered at the top of the given screen, sized from its expanded state.
+    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen, expanded: Bool? = nil, animated: Bool = false) {
+        let isExpanded = expanded ?? screen.displayID.flatMap { panelStates[$0]?.isExpanded } ?? false
+        // Width hugs the physical notch plus a wing on each side (or a compact pill without a notch).
+        let panelSize = NotchLayout.forScreen(screen).panelSize(expanded: isExpanded)
         let screenFrame = screen.frame
-        let layout = NotchLayout.forScreen(screen)
-        let targetWidth = expanded ? max(layout.contentWidth, 440) : layout.contentWidth
-        let targetHeight = expanded ? 180 + NotchLayout.bottomPadding : layout.panelSize.height
-        let x = screenFrame.minX + (screenFrame.width - targetWidth) / 2
-        let y = screenFrame.maxY - targetHeight
+        let frame = NSRect(
+            x: screenFrame.minX + (screenFrame.width - panelSize.width) / 2,
+            // Place the window exactly at the top of the screen.
+            y: screenFrame.maxY - panelSize.height,
+            width: panelSize.width,
+            height: panelSize.height
+        )
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.32
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(NSRect(x: x, y: y, width: targetWidth, height: targetHeight), display: true)
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.32
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
+    }
+}
+
+/// Hosting view that reports pointer enter/exit to the panel state. AppKit tracking with
+/// `.activeAlways` keeps hover working in the non-activating panel while the app is inactive.
+final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    private let panelState: NotchPanelState
+    private var hoverArea: NSTrackingArea?
+
+    init(rootView: Content, panelState: NotchPanelState) {
+        self.panelState = panelState
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init(rootView: Content) {
+        fatalError("init(rootView:) has not been implemented")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if hoverArea == nil {
+            // `.inVisibleRect` follows the bounds as the panel grows and shrinks.
+            let area = NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            hoverArea = area
         }
     }
 
-    /// Positions a panel centered at the top of the given screen
-    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen) {
-        let screenFrame = screen.frame
-        
-        panel.contentView?.layoutSubtreeIfNeeded()
-        // Width hugs the physical notch plus a wing on each side (or a compact pill without a notch).
-        let panelSize = NotchLayout.forScreen(screen).panelSize
-        panel.setContentSize(panelSize)
-        
-        let x = screenFrame.minX + (screenFrame.width - panelSize.width) / 2
-        
-        // Place the window exactly at the top of the screen.
-        let y = screenFrame.maxY - panelSize.height
-        
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        panelState.pointerEntered()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        panelState.pointerExited()
     }
 }
 
@@ -245,6 +298,7 @@ class NotchOverlayWindow: NSPanel {
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         self.ignoresMouseEvents = false
+        self.acceptsMouseMovedEvents = true
     }
     
     override var canBecomeKey: Bool {
