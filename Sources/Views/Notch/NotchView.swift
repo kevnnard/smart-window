@@ -17,7 +17,9 @@ struct NotchLayout: Equatable {
     /// Height of the details that open below the compact row.
     static let expandedCardHeight: CGFloat = 180
     /// Narrowest drawer that still fits the artwork, controls and source badges.
-    static let expandedMinWidth: CGFloat = 260
+    /// Kept at or below the tightest MacBook notch (notch + two minimum wings, about 249 pt) so
+    /// opening the drawer never changes the window width, which would move the compact row.
+    static let expandedMinWidth: CGFloat = 240
     /// How much wider than the compact notch the expanded card is (Notch tab, Expanded width).
     var expandedExtraWidth: CGFloat = 0
 
@@ -64,16 +66,20 @@ struct NotchLayout: Equatable {
     /// only when the content would not fit.
     var expandedWidth: CGFloat { max(contentWidth + expandedExtraWidth, Self.expandedMinWidth) }
 
-    /// The compact row as drawn on top of the open drawer: as wide as the drawer, with the
-    /// camera gap still centered on a notched screen.
-    var expandedRowLayout: NotchLayout {
-        var row = self
-        row.customWidth = expandedWidth
-        return row
+
+    /// The notch window keeps this size in both states: resizing a window redraws its content
+    /// late, which moved the compact row. The part not drawn is transparent and lets clicks through.
+    var windowSize: CGSize { panelSize(expanded: true) }
+
+    /// The drawn part of the window, from its top-left corner: the compact pill, or the whole open
+    /// drawer. Hover counts only here.
+    func visibleRect(expanded: Bool) -> CGRect {
+        let width = expanded ? expandedWidth : contentWidth
+        let height = expanded ? barHeight + Self.expandedCardHeight : barHeight
+        return CGRect(x: (windowSize.width - width) / 2, y: 0, width: width, height: height)
     }
 
-    /// Window size for the compact pill or the expanded drawer. Shared by the view and the
-    /// controller so the panel frame and the rendered content cannot diverge.
+    /// Size of the drawn compact pill or open drawer (plus the bottom shadow padding).
     func panelSize(expanded: Bool) -> CGSize {
         guard expanded else { return panelSize }
         return CGSize(width: expandedWidth,
@@ -210,7 +216,7 @@ struct NotchView: View {
     var displayKey: String? = nil
     @ObservedObject var panelState: NotchPanelState
     @ObservedObject private var displayPreferences = DisplayPreferences.shared
-    static let sourcePillWidth: CGFloat = 64
+    static let sourcePillWidth: CGFloat = 60
     static let sourcePillHeight: CGFloat = 20
     static let maxVisibleSources = 3
 
@@ -304,18 +310,23 @@ struct NotchView: View {
             if isVisible {
                 // One view in both states: the compact row is never removed or rebuilt when
                 // expanding; the details are inserted below it and the shape grows around both.
-                let row = isExpanded ? activeLayout.expandedRowLayout : activeLayout
+                // The compact row keeps its own width and position when the drawer opens; only the
+                // drawer around it widens when the details need more room.
+                let row = activeLayout
                 let width = isExpanded ? cardWidth : activeLayout.contentWidth
                 let shape = BottomRoundedRectangle(radius: isExpanded ? 22 : (activeLayout.hasNotch ? 12 : 14))
                 VStack(spacing: 0) {
                     compactContent(for: row)
-                        .frame(width: width, height: row.barHeight)
+                        .frame(width: row.contentWidth, height: row.barHeight)
+                        .frame(width: width)
                         .contentShape(Rectangle())
                         // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
                         .onTapGesture { panelState.expand() }
                     if isExpanded {
+                        // Fades in place: a slide from the top would pass behind the compact row
+                        // and read as the row moving.
                         expandedIslandCard(width: cardWidth)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .transition(.opacity)
                     }
                 }
                 .frame(width: width, alignment: .top)
@@ -610,7 +621,7 @@ struct NotchView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10)
         // Top-aligned so a status line appearing under the controls never shifts the rows above.

@@ -9,8 +9,6 @@ final class NotchController: NSObject, ObservableObject {
     /// Expanded state of each panel; the single source of truth for its size.
     private var panelStates: [CGDirectDisplayID: NotchPanelState] = [:]
     private var panelObservers: [CGDirectDisplayID: AnyCancellable] = [:]
-    /// Window shrinks scheduled after a drawer closes; cancelled if it opens again first.
-    private var pendingShrinks: [CGDirectDisplayID: DispatchWorkItem] = [:]
     
     /// Shared NowPlayingService so all notch windows show the same info
     private let nowPlayingService = NowPlayingService()
@@ -154,7 +152,6 @@ final class NotchController: NSObject, ObservableObject {
             panels.removeValue(forKey: displayID)
             panelStates.removeValue(forKey: displayID)
             panelObservers.removeValue(forKey: displayID)
-            pendingShrinks.removeValue(forKey: displayID)?.cancel()
         }
         
         // Add panels for newly connected screens
@@ -192,7 +189,7 @@ final class NotchController: NSObject, ObservableObject {
         let layout = NotchLayout.forScreen(screen)
         let state = NotchPanelState()
         let panel = NotchOverlayWindow(
-            contentRect: NSRect(origin: .zero, size: layout.panelSize(expanded: false)),
+            contentRect: NSRect(origin: .zero, size: layout.windowSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -205,43 +202,31 @@ final class NotchController: NSObject, ObservableObject {
                 displayKey: DisplayIdentity.key(for: screen),
                 panelState: state
             ),
-            panelState: state
+            panelState: state,
+            hoverRect: { [weak state] in
+                NotchLayout.forScreen(screen).visibleRect(expanded: state?.isExpanded ?? false)
+            }
         )
         panelStates[displayID] = state
         // @Published emits on willSet, so the new value is passed explicitly.
         panelObservers[displayID] = state.$isExpanded
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] expanded in
-                guard let self else { return }
-                self.pendingShrinks[displayID]?.cancel()
-                self.pendingShrinks[displayID] = nil
-                let resize = { [weak self] in
-                    guard let self,
-                          let panel = self.panels[displayID],
-                          let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else { return }
-                    self.positionPanel(panel, on: screen, expanded: expanded)
-                }
-                // Grow right away so the drawer has room to open; shrink after it has closed. The
-                // window is never animated, so its top edge and the compact row stay still.
-                // The grow waits one run loop turn: this sink runs in @Published's willSet, and
-                // resizing the window synchronously here left SwiftUI without the open drawer.
-                if expanded {
-                    DispatchQueue.main.async(execute: resize)
-                } else {
-                    let work = DispatchWorkItem(block: resize)
-                    self.pendingShrinks[displayID] = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + NotchPanelState.windowShrinkDelay, execute: work)
+            .sink { [weak self] _ in
+                // The window never changes size; only the hover area follows the drawn part.
+                // Next run loop turn: this sink runs in @Published's willSet.
+                DispatchQueue.main.async {
+                    (self?.panels[displayID]?.contentView as? NotchHostingView<NotchView>)?.refreshHoverArea()
                 }
             }
         return panel
     }
 
-    /// Positions a panel centered at the top of the given screen, sized from its expanded state.
-    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen, expanded: Bool? = nil) {
-        let isExpanded = expanded ?? screen.displayID.flatMap { panelStates[$0]?.isExpanded } ?? false
-        // Width hugs the physical notch plus a wing on each side (or a compact pill without a notch).
-        let panelSize = NotchLayout.forScreen(screen).panelSize(expanded: isExpanded)
+    /// Positions a panel centered at the top of the given screen. The window always has the
+    /// open-drawer size, so opening and closing never resize it (a resize redraws late and moves
+    /// the compact row); the transparent part lets clicks through.
+    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen) {
+        let panelSize = NotchLayout.forScreen(screen).windowSize
         let screenFrame = screen.frame
         let frame = NSRect(
             x: screenFrame.minX + (screenFrame.width - panelSize.width) / 2,
@@ -252,6 +237,7 @@ final class NotchController: NSObject, ObservableObject {
         )
 
         panel.setFrame(frame, display: true)
+        (panel.contentView as? NotchHostingView<NotchView>)?.refreshHoverArea()
     }
 }
 
@@ -260,9 +246,12 @@ final class NotchController: NSObject, ObservableObject {
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     private let panelState: NotchPanelState
     private var hoverArea: NSTrackingArea?
+    /// The drawn part of the window, from its top-left corner (see `NotchLayout.visibleRect`).
+    private let hoverRect: () -> CGRect
 
-    init(rootView: Content, panelState: NotchPanelState) {
+    init(rootView: Content, panelState: NotchPanelState, hoverRect: @escaping () -> CGRect) {
         self.panelState = panelState
+        self.hoverRect = hoverRect
         super.init(rootView: rootView)
         // Only NotchController sizes the panel. By default the hosting view resizes its window to
         // the SwiftUI content, keeping the bottom-left corner fixed, so the window would grow up
@@ -280,19 +269,18 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Rebuilds the hover area after the drawer opens or closes or the window moves.
+    func refreshHoverArea() { updateTrackingAreas() }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if hoverArea == nil {
-            // `.inVisibleRect` follows the bounds as the panel grows and shrinks.
-            let area = NSTrackingArea(
-                rect: .zero,
-                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                owner: self,
-                userInfo: nil
-            )
-            addTrackingArea(area)
-            hoverArea = area
-        }
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        // Only the drawn pill or drawer counts as hover; the rest of the window is transparent.
+        let visible = hoverRect()
+        let rect = NSRect(x: visible.minX, y: bounds.height - visible.maxY, width: visible.width, height: visible.height)
+        let area = NSTrackingArea(rect: rect, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
     }
 
     override func mouseEntered(with event: NSEvent) {

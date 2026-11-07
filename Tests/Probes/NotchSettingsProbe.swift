@@ -67,27 +67,32 @@ import Foundation
         var wider = nonNotchedLayout
         wider.expandedExtraWidth = 200
         check(wider.panelSize(expanded: true).width == 480, "Expanded width adds to the compact width")
-        check(wider.expandedRowLayout.contentWidth == 480, "the compact row widens with the drawer")
         // On a MacBook the compact row keeps hugging the camera; details open below the notch.
         let macBook = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 280, customHeight: 34)
         check(macBook.expandedTopInset == 38, "the notch row stays on top on a notched screen")
         check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
               "notched expanded height is the notch row plus the details")
-        check(macBook.expandedRowLayout.contentWidth == macBook.contentWidth,
-              "at the default Expanded width the compact row keeps its width when the drawer opens")
-        check(macBook.expandedRowLayout.contentWidth == macBook.expandedWidth
-              && macBook.expandedRowLayout.notchWidth == 185,
-              "the expanded notch row keeps the camera gap centered")
         let hugging = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 180, customHeight: 34)
-        check(hugging.panelSize(expanded: true).width == NotchLayout.expandedMinWidth,
-              "a notch too small for the content widens only to the content minimum")
-        check(hugging.expandedRowLayout.contentWidth == NotchLayout.expandedMinWidth,
-              "the notch row widens to the drawer when the content needs more room")
+        // The window must not change width when the drawer opens (a width change redraws a frame
+        // late and moves the compact row), so the tightest MacBook notch already fits the details.
+        check(hugging.contentWidth == 249 && hugging.panelSize(expanded: true).width == hugging.contentWidth,
+              "the tightest MacBook notch opens without changing width")
+        let tinyPill = NotchLayout(notchWidth: 0, physicalBarHeight: 34, customWidth: 180, customHeight: 34)
+        check(tinyPill.panelSize(expanded: true).width == NotchLayout.expandedMinWidth,
+              "a pill narrower than the details widens only to the content minimum")
+        check(NotchLayout.expandedMinWidth <= 249, "the content minimum fits the tightest MacBook notch")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
-        // The window grows at once when opening and shrinks only after the drawer animation ends,
-        // so the compact row never moves while the window changes size.
-        check(NotchPanelState.windowShrinkDelay > NotchPanelState.drawerAnimationResponse,
-              "the window shrinks after the closing animation")
+        // The window keeps the open-drawer size in both states (resizing it redraws late and moves
+        // the compact row). Hover counts only over the visible part; clicks elsewhere pass through.
+        check(hugging.windowSize == hugging.panelSize(expanded: true), "the window always has the open-drawer size")
+        check(hugging.visibleRect(expanded: false) == CGRect(x: 0, y: 0, width: 249, height: 38),
+              "compact hover area is the pill at the top")
+        check(hugging.visibleRect(expanded: true) == CGRect(x: 0, y: 0, width: 249, height: 38 + NotchLayout.expandedCardHeight),
+              "open hover area is the whole drawer")
+        var spacious = hugging
+        spacious.expandedExtraWidth = 100
+        check(spacious.visibleRect(expanded: false) == CGRect(x: 50, y: 0, width: 249, height: 38),
+              "the compact pill is centered in a window widened for the drawer")
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
         check(wide.panelSize(expanded: true).width == wide.contentWidth, "expanded width never below contentWidth")
