@@ -14,8 +14,16 @@ struct NotchLayout: Equatable {
     var customHeight: CGFloat = CGFloat(AppSettings.notchDefaultHeight)
 
     static let bottomPadding: CGFloat = 6
+    /// Card content height with the header on one row.
     static let expandedCardHeight: CGFloat = 180
-    static let expandedMinWidth: CGFloat = 440
+    /// Card content height when the header needs two rows (narrow card).
+    static let expandedStackedCardHeight: CGFloat = 208
+    /// Narrowest card that still fits the artwork, controls and source badges.
+    static let expandedMinWidth: CGFloat = 260
+    /// Below this width the source name and the app badges go on separate rows.
+    static let expandedOneRowHeaderWidth: CGFloat = 400
+    /// How much wider than the compact notch the expanded card is (Notch tab, Expanded width).
+    var expandedExtraWidth: CGFloat = 0
 
     var hasNotch: Bool { notchWidth > 0 }
 
@@ -58,10 +66,18 @@ struct NotchLayout: Equatable {
     /// notch, so the band keeps the card content out from under the camera housing.
     var expandedTopInset: CGFloat { hasNotch ? barHeight : 0 }
 
+    /// The expanded card keeps the compact width (plus the configured extra) and grows down,
+    /// widening only when the content would not fit.
+    var expandedWidth: CGFloat { max(contentWidth + expandedExtraWidth, Self.expandedMinWidth) }
+    var stacksExpandedHeader: Bool { expandedWidth < Self.expandedOneRowHeaderWidth }
+    var expandedCardContentHeight: CGFloat {
+        stacksExpandedHeader ? Self.expandedStackedCardHeight : Self.expandedCardHeight
+    }
+
     func panelSize(expanded: Bool) -> CGSize {
         guard expanded else { return panelSize }
-        return CGSize(width: max(contentWidth, Self.expandedMinWidth),
-                      height: expandedTopInset + Self.expandedCardHeight + Self.bottomPadding)
+        return CGSize(width: expandedWidth,
+                      height: expandedTopInset + expandedCardContentHeight + Self.bottomPadding)
     }
 
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
@@ -72,14 +88,17 @@ struct NotchLayout: Equatable {
             globalHeight: AppSettings.shared.notchCustomHeight)
         let width = customWidth ?? CGFloat(size.width)
         let height = customHeight ?? CGFloat(size.height)
+        let extra = CGFloat(AppSettings.shared.notchExpandedExtraWidth)
         let inset = screen.safeAreaInsets.top
         guard inset > 0,
               let left = screen.auxiliaryTopLeftArea,
               let right = screen.auxiliaryTopRightArea else {
-            return NotchLayout(notchWidth: 0, physicalBarHeight: 34, customWidth: width, customHeight: height)
+            return NotchLayout(notchWidth: 0, physicalBarHeight: 34, customWidth: width, customHeight: height,
+                               expandedExtraWidth: extra)
         }
         let notch = screen.frame.width - left.width - right.width
-        return NotchLayout(notchWidth: max(0, notch.rounded()), physicalBarHeight: inset, customWidth: width, customHeight: height)
+        return NotchLayout(notchWidth: max(0, notch.rounded()), physicalBarHeight: inset, customWidth: width,
+                           customHeight: height, expandedExtraWidth: extra)
     }
 }
 
@@ -295,7 +314,9 @@ struct NotchView: View {
         ZStack(alignment: .top) {
             if isVisible {
                 if isExpanded {
-                    expandedIslandCard(width: cardWidth, topInset: activeLayout.expandedTopInset)
+                    expandedIslandCard(width: cardWidth, topInset: activeLayout.expandedTopInset,
+                                       stackedHeader: activeLayout.stacksExpandedHeader,
+                                       contentHeight: activeLayout.expandedCardContentHeight)
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                 } else {
                     compactContent(for: activeLayout)
@@ -444,11 +465,16 @@ struct NotchView: View {
 
     /// `topInset` > 0 attaches the card to the top edge below the notch band, like the native
     /// Dynamic Island; 0 keeps a floating card with all corners rounded.
-    private func expandedIslandCard(width: CGFloat, topInset: CGFloat) -> some View {
+    /// `stackedHeader` puts the source name and the app badges on separate rows for narrow cards.
+    private func expandedIslandCard(width: CGFloat, topInset: CGFloat, stackedHeader: Bool,
+                                    contentHeight: CGFloat) -> some View {
         let shape = IslandCardShape(radius: 22, attachedToTop: topInset > 0)
         return VStack(spacing: 10) {
             // Header: Source Badge + App Selector Pills + Close
-            HStack {
+            let header = stackedHeader
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                : AnyLayout(HStackLayout(spacing: 8))
+            header {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(sourceAccentColor)
@@ -463,7 +489,7 @@ struct NotchView: View {
                 .frame(maxWidth: Self.sourceBadgeMaxWidth, minHeight: 22, maxHeight: 22, alignment: .leading)
                 .background(Color.white.opacity(0.08), in: Capsule())
 
-                Spacer()
+                if !stackedHeader { Spacer() }
 
                 // Multi-app selector pills
                 HStack(spacing: 5) {
@@ -612,7 +638,7 @@ struct NotchView: View {
         .padding(.top, 14)
         .padding(.bottom, 10)
         // Top-aligned so a status line appearing under the controls never shifts the rows above.
-        .frame(width: width, height: NotchLayout.expandedCardHeight, alignment: .top)
+        .frame(width: width, height: contentHeight, alignment: .top)
         .padding(.top, topInset)
         .background(notchBackground)
         .clipShape(shape)

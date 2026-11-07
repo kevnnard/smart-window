@@ -37,6 +37,9 @@ final class AppSettings: ObservableObject {
     @AppStorage("notchCustomWidth") var notchCustomWidth: Double = 280.0
     /// User-customized height of the notch (points).
     @AppStorage("notchCustomHeight") var notchCustomHeight: Double = 34.0
+    /// Extra width of the expanded card beyond the compact notch; 0 keeps the notch width.
+    static let notchExpandedExtraWidthRange: ClosedRange<Double> = 0...200
+    @AppStorage("notchExpandedExtraWidth") var notchExpandedExtraWidth: Double = 0
 
     /// Every widget the bar knows how to render, in default order.
     static let knownWidgets: [String] = ["RAM", "CPU", "Temperature", "GPU", "MIC", "VOL", "Tailscale", "Keyboard", "Battery"]

@@ -49,14 +49,27 @@ struct NotchPane: View {
                            range: AppSettings.notchMinHeight...AppSettings.notchMaxHeight, step: 1) {
                     settings.notchCustomHeight = $0
                 }
+                LabeledContent("Expanded width") {
+                    HStack(spacing: 10) {
+                        Slider(value: $settings.notchExpandedExtraWidth,
+                               in: AppSettings.notchExpandedExtraWidthRange, step: 10)
+                            .frame(width: 180)
+                        Text(settings.notchExpandedExtraWidth == 0
+                             ? "Same" : "+\(Int(settings.notchExpandedExtraWidth)) pt")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
                 Button("Reset Default Size") {
                     settings.notchCustomWidth = AppSettings.notchDefaultWidth
                     settings.notchCustomHeight = AppSettings.notchDefaultHeight
+                    settings.notchExpandedExtraWidth = 0
                 }
             } header: {
                 Text("Default size")
             } footer: {
-                Text("Used by every display set to Default. On a MacBook the width includes the camera notch. Width 180–440 pt and height 30–46 pt keep the notch clear of the menus on a 13\" screen.")
+                Text("Used by every display set to Default. On a MacBook the width includes the camera notch. Width 180–440 pt and height 30–46 pt keep the notch clear of the menus on a 13\" screen. Expanded width: Same keeps the open card as wide as the notch (it grows down, and widens only if its content would not fit); raise it to open wider.")
             }
 
             displaySection

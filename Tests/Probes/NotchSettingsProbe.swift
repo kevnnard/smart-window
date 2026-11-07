@@ -57,20 +57,32 @@ import Foundation
 
         // Panel sizing shared by NotchView and NotchController
         check(nonNotchedLayout.panelSize(expanded: false) == nonNotchedLayout.panelSize, "compact panelSize(expanded:) matches panelSize")
+        // The expanded card keeps the compact width and grows down; a narrow card stacks its header.
         let expandedSmall = nonNotchedLayout.panelSize(expanded: true)
-        check(expandedSmall.width == 440, "expanded width is at least 440")
-        check(expandedSmall.height == NotchLayout.expandedCardHeight + NotchLayout.bottomPadding, "expanded height is card height plus bottom padding")
+        check(expandedSmall.width == 280, "expanded width defaults to the compact width")
+        check(nonNotchedLayout.stacksExpandedHeader, "a narrow card stacks its header")
+        check(expandedSmall.height == NotchLayout.expandedStackedCardHeight + NotchLayout.bottomPadding,
+              "a stacked card is taller")
         check(nonNotchedLayout.expandedTopInset == 0, "cards on screens without a notch start at the top edge")
+        var wider = nonNotchedLayout
+        wider.expandedExtraWidth = 200
+        check(wider.panelSize(expanded: true).width == 480 && !wider.stacksExpandedHeader,
+              "Expanded width adds to the compact width")
+        check(wider.panelSize(expanded: true).height == NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
+              "a wide card keeps the one-row header height")
         // On a MacBook the card grows down from the notch: the camera band stays empty on top.
         let macBook = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 280, customHeight: 34)
         check(macBook.expandedTopInset == 38, "cards on a notched screen reserve the notch band")
-        check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
+        check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedStackedCardHeight + NotchLayout.bottomPadding,
               "notched expanded height adds the notch band above the card content")
+        let hugging = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 180, customHeight: 34)
+        check(hugging.panelSize(expanded: true).width == NotchLayout.expandedMinWidth,
+              "a notch too small for the content widens only to the content minimum")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
-        // Only a very wide notch plus its minimum wings can exceed the expanded card width now.
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
         check(wide.panelSize(expanded: true).width == wide.contentWidth, "expanded width never below contentWidth")
+        check(AppSettings.notchExpandedExtraWidthRange == 0...200, "Expanded width setting adds 0-200 pt")
         check(wide.panelSize(expanded: true).width >= wide.panelSize(expanded: false).width, "expanded never narrower than compact")
 
         // Visible source badges always include the main source
