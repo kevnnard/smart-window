@@ -47,8 +47,13 @@ struct NotchLayout: Equatable {
     }
 
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
-        let width = customWidth ?? CGFloat(AppSettings.shared.notchCustomWidth)
-        let height = customHeight ?? CGFloat(AppSettings.shared.notchCustomHeight)
+        // A display with a custom size in Displays overrides the global size from Settings.
+        let size = DisplayPreferences.shared.effectiveNotchSize(
+            on: DisplayIdentity.key(for: screen),
+            globalWidth: AppSettings.shared.notchCustomWidth,
+            globalHeight: AppSettings.shared.notchCustomHeight)
+        let width = customWidth ?? CGFloat(size.width)
+        let height = customHeight ?? CGFloat(size.height)
         let inset = screen.safeAreaInsets.top
         guard inset > 0,
               let left = screen.auxiliaryTopLeftArea,

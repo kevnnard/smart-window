@@ -278,7 +278,7 @@ private struct AppearancePane: View {
             } header: {
                 Text("Notch")
             } footer: {
-                Text("Custom width (180–440 pt) and height (30–46 pt) keep the notch proportional without overlapping macOS menus on 13\" screens.")
+                Text("Custom width (180–440 pt) and height (30–46 pt) keep the notch proportional without overlapping macOS menus on 13\" screens. This is the default for every display; give a display its own size in Displays.")
             }
 
             Section {

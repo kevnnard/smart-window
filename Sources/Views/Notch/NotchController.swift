@@ -19,7 +19,11 @@ final class NotchController: NSObject, ObservableObject {
         super.init()
         DisplayPreferences.shared.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.refreshVisibility() }
+            .sink { [weak self] _ in
+                // A per-display notch size may have changed, so resize as well.
+                self?.repositionAll()
+                self?.refreshVisibility()
+            }
             .store(in: &cancellables)
 
         AppSettings.shared.objectWillChange

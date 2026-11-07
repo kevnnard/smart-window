@@ -14,6 +14,9 @@ import Foundation
         check(AppSettings.notchMaxWidth == 440.0, "notchMaxWidth is 440")
         check(AppSettings.notchMinHeight == 30.0, "notchMinHeight is 30")
         check(AppSettings.notchMaxHeight == 46.0, "notchMaxHeight is 46")
+        check(DisplayPreferences.NotchSize.widthRange == AppSettings.notchMinWidth...AppSettings.notchMaxWidth
+              && DisplayPreferences.NotchSize.heightRange == AppSettings.notchMinHeight...AppSettings.notchMaxHeight,
+              "per-display notch size ranges match the global sliders")
         check(AppSettings.notchDefaultWidth == 280.0, "notchDefaultWidth is 280")
         check(AppSettings.notchDefaultHeight == 34.0, "notchDefaultHeight is 34")
 

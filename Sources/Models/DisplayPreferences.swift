@@ -11,9 +11,24 @@ final class DisplayPreferences: ObservableObject {
         var value: Bool? { self == .inherit ? nil : self == .show }
         init(_ value: Bool?) { self = value.map { $0 ? .show : .hide } ?? .inherit }
     }
+    /// Notch badge size for one display, in points. Ranges match the global sliders in Settings.
+    struct NotchSize: Codable, Equatable {
+        static let widthRange: ClosedRange<Double> = 180...440
+        static let heightRange: ClosedRange<Double> = 30...46
+        var width: Double
+        var height: Double
+
+        var clamped: NotchSize {
+            NotchSize(width: min(max(width, Self.widthRange.lowerBound), Self.widthRange.upperBound),
+                      height: min(max(height, Self.heightRange.lowerBound), Self.heightRange.upperBound))
+        }
+    }
     struct Override: Codable, Equatable {
         var widgets: [String: Bool] = [:]
         var nowPlaying: Bool?
+        /// nil means Default: the display uses the global notch size. Optional so overrides saved
+        /// before this field existed keep decoding.
+        var notchSize: NotchSize?
     }
     private let defaults: UserDefaults
     private static let storageKey = "displayOverrides.v1"
@@ -49,12 +64,24 @@ final class DisplayPreferences: ObservableObject {
         value.nowPlaying = mode.value
         save(value, on: key)
     }
+    /// The display's custom notch size, or nil when it uses the global size.
+    func notchSize(on key: String?) -> NotchSize? { key.flatMap { overrides[$0]?.notchSize } }
+    func effectiveNotchSize(on key: String?, globalWidth: Double, globalHeight: Double) -> NotchSize {
+        notchSize(on: key) ?? NotchSize(width: globalWidth, height: globalHeight)
+    }
+    /// Sets a custom size (clamped to the allowed ranges), or nil to return to Default.
+    func setNotchSize(_ size: NotchSize?, on key: String) {
+        guard !key.isEmpty else { return }
+        var value = overrides[key] ?? Override()
+        value.notchSize = size?.clamped
+        save(value, on: key)
+    }
     func reset(_ key: String) {
         overrides.removeValue(forKey: key)
         persist()
     }
     private func save(_ value: Override, on key: String) {
-        if value.widgets.isEmpty && value.nowPlaying == nil {
+        if value.widgets.isEmpty && value.nowPlaying == nil && value.notchSize == nil {
             overrides.removeValue(forKey: key)
         } else {
             overrides[key] = value
