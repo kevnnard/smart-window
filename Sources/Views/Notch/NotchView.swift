@@ -267,13 +267,15 @@ struct NotchView: View {
                 } else {
                     compactContent(for: activeLayout)
                         .frame(width: activeLayout.contentWidth, height: activeLayout.barHeight)
-                        .background(settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black)
+                        .background(notchBackground)
                         .clipShape(BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14))
+                        // Black matches the physical notch: no outline or shadow, so it blends with
+                        // the camera housing. The bar color needs both to stand off the wallpaper.
                         .overlay(
                             BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                .stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.12 : 0), lineWidth: 1)
                         )
-                        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+                        .shadow(color: .black.opacity(settings.notchBadgeMatchesBar ? 0.35 : 0), radius: 4, y: 2)
                         .contentShape(Rectangle())
                         // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
                         .onTapGesture { panelState.expand() }
@@ -567,13 +569,19 @@ struct NotchView: View {
         .padding(.bottom, 10)
         // Top-aligned so a status line appearing under the controls never shifts the rows above.
         .frame(width: width, height: NotchLayout.expandedCardHeight, alignment: .top)
-        .background(Color.black.opacity(0.94))
+        .background(notchBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                .stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.14 : 0), lineWidth: 1)
         )
+        // The card floats over windows, so it keeps a shadow in both styles.
         .shadow(color: .black.opacity(0.8), radius: 24, y: 10)
+    }
+
+    /// Opaque black like the physical notch (the default), or the bar color when chosen in Settings.
+    private var notchBackground: Color {
+        settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black
     }
 
     // MARK: - Progress
