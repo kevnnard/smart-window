@@ -214,9 +214,16 @@ private struct AdaptiveStatusRegion: View {
     // Music info removed - now displayed in Notch
     
     var body: some View {
-        SystemInfoView(displayKey: displayKey)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        if availableWidth.isFinite && availableWidth != .greatestFiniteMagnitude {
+            TrailingStatusScrollView(availableWidth: availableWidth) {
+                SystemInfoView(displayKey: displayKey)
+            }
+        } else {
+            // External displays keep the existing intrinsic-width status row.
+            SystemInfoView(displayKey: displayKey)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
     }
 }
 
