@@ -222,10 +222,12 @@ final class NotchController: NSObject, ObservableObject {
                           let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else { return }
                     self.positionPanel(panel, on: screen, expanded: expanded)
                 }
-                // Grow at once so the drawer has room to open; shrink after it has closed. The
+                // Grow right away so the drawer has room to open; shrink after it has closed. The
                 // window is never animated, so its top edge and the compact row stay still.
+                // The grow waits one run loop turn: this sink runs in @Published's willSet, and
+                // resizing the window synchronously here left SwiftUI without the open drawer.
                 if expanded {
-                    resize()
+                    DispatchQueue.main.async(execute: resize)
                 } else {
                     let work = DispatchWorkItem(block: resize)
                     self.pendingShrinks[displayID] = work
