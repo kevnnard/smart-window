@@ -84,6 +84,10 @@ import Foundation
         check(hugging.expandedRowLayout.contentWidth == NotchLayout.expandedMinWidth,
               "the notch row widens to the drawer when the content needs more room")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
+        // The window grows at once when opening and shrinks only after the drawer animation ends,
+        // so the compact row never moves while the window changes size.
+        check(NotchPanelState.windowShrinkDelay > NotchPanelState.drawerAnimationResponse,
+              "the window shrinks after the closing animation")
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
         check(wide.panelSize(expanded: true).width == wide.contentWidth, "expanded width never below contentWidth")

@@ -332,7 +332,10 @@ struct NotchView: View {
         }
         .frame(width: activeSize.width, height: activeSize.height, alignment: .top)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isVisible)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
+        // Pinned to the top of the window: NSHostingView centers smaller content, which would move
+        // the compact row whenever the window is taller than the drawer.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.spring(response: NotchPanelState.drawerAnimationResponse, dampingFraction: 0.8), value: isExpanded)
         .animation(.easeInOut(duration: 0.2), value: nowPlaying.isPlaying)
         .onChange(of: isVisible) { visible in
             if !visible { panelState.collapse() }

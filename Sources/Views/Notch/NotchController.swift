@@ -9,6 +9,8 @@ final class NotchController: NSObject, ObservableObject {
     /// Expanded state of each panel; the single source of truth for its size.
     private var panelStates: [CGDirectDisplayID: NotchPanelState] = [:]
     private var panelObservers: [CGDirectDisplayID: AnyCancellable] = [:]
+    /// Window shrinks scheduled after a drawer closes; cancelled if it opens again first.
+    private var pendingShrinks: [CGDirectDisplayID: DispatchWorkItem] = [:]
     
     /// Shared NowPlayingService so all notch windows show the same info
     private let nowPlayingService = NowPlayingService()
@@ -152,6 +154,7 @@ final class NotchController: NSObject, ObservableObject {
             panels.removeValue(forKey: displayID)
             panelStates.removeValue(forKey: displayID)
             panelObservers.removeValue(forKey: displayID)
+            pendingShrinks.removeValue(forKey: displayID)?.cancel()
         }
         
         // Add panels for newly connected screens
@@ -210,16 +213,30 @@ final class NotchController: NSObject, ObservableObject {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] expanded in
-                guard let self,
-                      let panel = self.panels[displayID],
-                      let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else { return }
-                self.positionPanel(panel, on: screen, expanded: expanded, animated: true)
+                guard let self else { return }
+                self.pendingShrinks[displayID]?.cancel()
+                self.pendingShrinks[displayID] = nil
+                let resize = { [weak self] in
+                    guard let self,
+                          let panel = self.panels[displayID],
+                          let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else { return }
+                    self.positionPanel(panel, on: screen, expanded: expanded)
+                }
+                // Grow at once so the drawer has room to open; shrink after it has closed. The
+                // window is never animated, so its top edge and the compact row stay still.
+                if expanded {
+                    resize()
+                } else {
+                    let work = DispatchWorkItem(block: resize)
+                    self.pendingShrinks[displayID] = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + NotchPanelState.windowShrinkDelay, execute: work)
+                }
             }
         return panel
     }
 
     /// Positions a panel centered at the top of the given screen, sized from its expanded state.
-    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen, expanded: Bool? = nil, animated: Bool = false) {
+    private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen, expanded: Bool? = nil) {
         let isExpanded = expanded ?? screen.displayID.flatMap { panelStates[$0]?.isExpanded } ?? false
         // Width hugs the physical notch plus a wing on each side (or a compact pill without a notch).
         let panelSize = NotchLayout.forScreen(screen).panelSize(expanded: isExpanded)
@@ -232,15 +249,7 @@ final class NotchController: NSObject, ObservableObject {
             height: panelSize.height
         )
 
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.32
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
+        panel.setFrame(frame, display: true)
     }
 }
 

@@ -9,6 +9,11 @@ final class NotchPanelState: ObservableObject {
     /// Grace period before collapsing after the pointer leaves, so the window resize
     /// cannot start an expand/collapse loop.
     static let collapseDelay: TimeInterval = 0.25
+    /// Spring response of the drawer opening and closing in NotchView.
+    static let drawerAnimationResponse: TimeInterval = 0.35
+    /// The window grows at once when the drawer opens and shrinks only after it has closed, so
+    /// its top edge (and the compact row) never moves while the size changes.
+    static let windowShrinkDelay: TimeInterval = 0.4
 
     private var collapseTask: Task<Void, Never>?
 
