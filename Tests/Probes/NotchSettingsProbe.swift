@@ -57,27 +57,30 @@ import Foundation
 
         // Panel sizing shared by NotchView and NotchController
         check(nonNotchedLayout.panelSize(expanded: false) == nonNotchedLayout.panelSize, "compact panelSize(expanded:) matches panelSize")
-        // The expanded card keeps the compact width and grows down; a narrow card stacks its header.
+        // Expanding keeps the compact row on top and opens the details below it, as one drawer
+        // as wide as the compact notch.
         let expandedSmall = nonNotchedLayout.panelSize(expanded: true)
         check(expandedSmall.width == 280, "expanded width defaults to the compact width")
-        check(nonNotchedLayout.stacksExpandedHeader, "a narrow card stacks its header")
-        check(expandedSmall.height == NotchLayout.expandedStackedCardHeight + NotchLayout.bottomPadding,
-              "a stacked card is taller")
-        check(nonNotchedLayout.expandedTopInset == 0, "cards on screens without a notch start at the top edge")
+        check(nonNotchedLayout.expandedTopInset == 34, "the compact row stays on top of the details")
+        check(expandedSmall.height == 34 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
+              "expanded height is the compact row plus the details")
         var wider = nonNotchedLayout
         wider.expandedExtraWidth = 200
-        check(wider.panelSize(expanded: true).width == 480 && !wider.stacksExpandedHeader,
-              "Expanded width adds to the compact width")
-        check(wider.panelSize(expanded: true).height == NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
-              "a wide card keeps the one-row header height")
-        // On a MacBook the card grows down from the notch: the camera band stays empty on top.
+        check(wider.panelSize(expanded: true).width == 480, "Expanded width adds to the compact width")
+        check(wider.expandedRowLayout.contentWidth == 480, "the compact row widens with the drawer")
+        // On a MacBook the compact row keeps hugging the camera; details open below the notch.
         let macBook = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 280, customHeight: 34)
-        check(macBook.expandedTopInset == 38, "cards on a notched screen reserve the notch band")
-        check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedStackedCardHeight + NotchLayout.bottomPadding,
-              "notched expanded height adds the notch band above the card content")
+        check(macBook.expandedTopInset == 38, "the notch row stays on top on a notched screen")
+        check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
+              "notched expanded height is the notch row plus the details")
+        check(macBook.expandedRowLayout.contentWidth == macBook.expandedWidth
+              && macBook.expandedRowLayout.notchWidth == 185,
+              "the expanded notch row keeps the camera gap centered")
         let hugging = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 180, customHeight: 34)
         check(hugging.panelSize(expanded: true).width == NotchLayout.expandedMinWidth,
               "a notch too small for the content widens only to the content minimum")
+        check(hugging.expandedRowLayout.contentWidth == NotchLayout.expandedMinWidth,
+              "the notch row widens to the drawer when the content needs more room")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
