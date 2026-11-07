@@ -344,7 +344,9 @@ suites; they do not register login items, change playback, or overwrite your set
 mkdir -p .build/probes
 swiftc Sources/Services/LoginItemService.swift Tests/Probes/LoginItemProbe.swift -o .build/probes/login-item-probe
 .build/probes/login-item-probe
-swiftc Sources/Services/NowPlayingService.swift Tests/Probes/NowPlayingControlsProbe.swift -o .build/probes/media-controls-probe
+swiftc -parse-as-library Tests/Probes/NowPlayingControlsProbe.swift Sources/Services/NowPlayingService.swift \
+  Sources/Services/MediaRemoteAdapterClient.swift Sources/Services/MediaRemoteAdapterLocator.swift \
+  Sources/Services/MediaSessionsClient.swift -o .build/probes/media-controls-probe
 .build/probes/media-controls-probe
 swiftc Sources/Models/WindowOverflowPolicy.swift Tests/Probes/WindowOverflowProbe.swift -o .build/probes/overflow-probe
 .build/probes/overflow-probe
