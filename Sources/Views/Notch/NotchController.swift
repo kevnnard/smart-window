@@ -262,6 +262,10 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     init(rootView: Content, panelState: NotchPanelState) {
         self.panelState = panelState
         super.init(rootView: rootView)
+        // Only NotchController sizes the panel. By default the hosting view resizes its window to
+        // the SwiftUI content, keeping the bottom-left corner fixed, so the window would grow up
+        // off screen or drop its top edge whenever the drawer opens or closes.
+        sizingOptions = []
     }
 
     @available(*, unavailable)
