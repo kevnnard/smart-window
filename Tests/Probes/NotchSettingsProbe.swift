@@ -73,6 +73,8 @@ import Foundation
         check(macBook.expandedTopInset == 38, "the notch row stays on top on a notched screen")
         check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
               "notched expanded height is the notch row plus the details")
+        check(macBook.expandedRowLayout.contentWidth == macBook.contentWidth,
+              "at the default Expanded width the compact row keeps its width when the drawer opens")
         check(macBook.expandedRowLayout.contentWidth == macBook.expandedWidth
               && macBook.expandedRowLayout.notchWidth == 185,
               "the expanded notch row keeps the camera gap centered")

@@ -172,6 +172,11 @@ struct MarqueeText: View {
 
 struct BottomRoundedRectangle: Shape {
     var radius: CGFloat
+    /// Animates the corner radius when the notch opens into the drawer.
+    var animatableData: CGFloat {
+        get { radius }
+        set { radius = newValue }
+    }
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
@@ -297,38 +302,32 @@ struct NotchView: View {
 
         ZStack(alignment: .top) {
             if isVisible {
-                if isExpanded {
-                    let row = activeLayout.expandedRowLayout
-                    let drawer = BottomRoundedRectangle(radius: 22)
-                    VStack(spacing: 0) {
-                        // The compact row stays where it was; the details open below it.
-                        compactContent(for: row)
-                            .frame(width: cardWidth, height: row.barHeight)
-                        expandedIslandCard(width: cardWidth)
-                    }
-                    .background(notchBackground)
-                    .clipShape(drawer)
-                    .overlay(drawer.stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.14 : 0), lineWidth: 1))
-                    // The open drawer floats over windows, so it keeps a shadow in both styles.
-                    .shadow(color: .black.opacity(0.8), radius: 24, y: 10)
-                    .transition(.opacity)
-                } else {
-                    compactContent(for: activeLayout)
-                        .frame(width: activeLayout.contentWidth, height: activeLayout.barHeight)
-                        .background(notchBackground)
-                        .clipShape(BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14))
-                        // Black matches the physical notch: no outline or shadow, so it blends with
-                        // the camera housing. The bar color needs both to stand off the wallpaper.
-                        .overlay(
-                            BottomRoundedRectangle(radius: activeLayout.hasNotch ? 12 : 14)
-                                .stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.12 : 0), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(settings.notchBadgeMatchesBar ? 0.35 : 0), radius: 4, y: 2)
+                // One view in both states: the compact row is never removed or rebuilt when
+                // expanding; the details are inserted below it and the shape grows around both.
+                let row = isExpanded ? activeLayout.expandedRowLayout : activeLayout
+                let width = isExpanded ? cardWidth : activeLayout.contentWidth
+                let shape = BottomRoundedRectangle(radius: isExpanded ? 22 : (activeLayout.hasNotch ? 12 : 14))
+                VStack(spacing: 0) {
+                    compactContent(for: row)
+                        .frame(width: width, height: row.barHeight)
                         .contentShape(Rectangle())
                         // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
                         .onTapGesture { panelState.expand() }
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    if isExpanded {
+                        expandedIslandCard(width: cardWidth)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
+                .frame(width: width, alignment: .top)
+                .background(notchBackground)
+                .clipShape(shape)
+                // Black matches the physical notch: no outline, and no shadow while compact, so it
+                // blends with the camera housing. The bar color needs both to stand off the
+                // wallpaper; the open drawer floats over windows, so it always has a shadow.
+                .overlay(shape.stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.12 : 0), lineWidth: 1))
+                .shadow(color: .black.opacity(isExpanded ? 0.8 : (settings.notchBadgeMatchesBar ? 0.35 : 0)),
+                        radius: isExpanded ? 24 : 4, y: isExpanded ? 10 : 2)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .frame(width: activeSize.width, height: activeSize.height, alignment: .top)
