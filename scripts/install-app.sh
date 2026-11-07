@@ -89,6 +89,8 @@ cp "$ADAPTER_BUILD_DIR/libMediaSessionsHelper.dylib" "$ADAPTER_BUNDLE_DIR/"
 cp "$ADAPTER_BUILD_DIR/media-sessions.pl" "$ADAPTER_BUNDLE_DIR/"
 # Ends the adapter stream when the app exits, even after a crash (S11).
 cp "$ADAPTER_BUILD_DIR/parent-guard.pl" "$ADAPTER_BUNDLE_DIR/"
+# BSD-3-Clause requires the notice in binary distributions.
+cp "$ROOT_DIR/Vendor/mediaremote-adapter/LICENSE" "$ADAPTER_BUNDLE_DIR/LICENSE"
 
 xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 sign_app_bundle

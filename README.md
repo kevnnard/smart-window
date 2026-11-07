@@ -123,7 +123,8 @@ track, controls and every app currently playing.
   one the notch shows.
 - **Safe controls:** previous, play/pause and next target Spotify and Music directly. Other
   apps are controlled only while macOS reports them as the current Now Playing app;
-  otherwise the controls are disabled with the reason, so another app is never paused.
+  otherwise the controls are disabled with the reason. macOS offers no per-app command,
+  so if the current app changes in the instant before a click, that click can reach it.
 - **Click to return:** click the artwork to bring the player forward.
 
 On a MacBook the notch is pure black, has no pixels over the camera, and its width
@@ -178,7 +179,7 @@ In **Displays**, choose a connected monitor and override each widget.
 **Default** follows global settings; **Show** and **Hide** take precedence on that
 monitor. Overrides use the display's CoreGraphics UUID and are retained across
 reconnection. Widget order, clock settings and separators remain global.
-"Use Defaults for This Display" resets only that monitor's overrides.
+"Use Default Widgets for This Display" resets only that monitor's overrides.
 
 Every notch setting lives in **Notch**, including which monitors show it and a
 custom size per monitor. A monitor set to Show or Hide there ignores the Default
