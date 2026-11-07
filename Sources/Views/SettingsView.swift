@@ -47,6 +47,7 @@ struct SettingsView: View {
         switch selection {
         case .general: GeneralPane()
         case .appearance: AppearancePane()
+        case .notch: NotchPane()
         case .widgets: WidgetsPane()
         case .displays: DisplaysPane()
         case .clock: ClockPane()
@@ -65,7 +66,7 @@ struct SettingsView: View {
 // MARK: - Panes
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, widgets, displays, clock, tailscale
+    case general, appearance, notch, widgets, displays, clock, tailscale
 
     var id: String { rawValue }
 
@@ -73,6 +74,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "General"
         case .appearance: return "Appearance"
+        case .notch: return "Notch"
         case .widgets: return "Widgets"
         case .displays: return "Displays"
         case .clock: return "Clock"
@@ -84,6 +86,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape.fill"
         case .appearance: return "paintbrush.fill"
+        case .notch: return "laptopcomputer"
         case .widgets: return "square.grid.3x1.below.line.grid.1x2.fill"
         case .displays: return "display.2"
         case .clock: return "clock.fill"
@@ -95,6 +98,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return .gray
         case .appearance: return .pink
+        case .notch: return .indigo
         case .widgets: return .blue
         case .displays: return .purple
         case .clock: return .orange
@@ -235,56 +239,11 @@ private struct AppearancePane: View {
             }
 
             Section {
-                Toggle("Show on all displays", isOn: $settings.notchShowOnAllDisplays)
-                Toggle("Always show notch", isOn: $settings.notchAlwaysVisible)
-
-                LabeledContent("Width") {
-                    HStack(spacing: 10) {
-                        Slider(value: $settings.notchCustomWidth, in: AppSettings.notchMinWidth...AppSettings.notchMaxWidth, step: 2)
-                            .frame(width: 180)
-                        Text("\(Int(settings.notchCustomWidth)) pt")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 48, alignment: .trailing)
-                    }
-                }
-
-                LabeledContent("Height") {
-                    HStack(spacing: 10) {
-                        Slider(value: $settings.notchCustomHeight, in: AppSettings.notchMinHeight...AppSettings.notchMaxHeight, step: 1)
-                            .frame(width: 180)
-                        Text("\(Int(settings.notchCustomHeight)) pt")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 48, alignment: .trailing)
-                    }
-                }
-
-                HStack {
-                    Spacer()
-                    Button("Reset Dimensions") {
-                        settings.notchCustomWidth = AppSettings.notchDefaultWidth
-                        settings.notchCustomHeight = AppSettings.notchDefaultHeight
-                    }
-                    .buttonStyle(.link)
-                    .font(.caption)
-                }
-
-                Picker("Now Playing badge", selection: $settings.notchBadgeMatchesBar) {
-                    Text("Black").tag(false)
-                    Text("Match bar color").tag(true)
-                }
-                .pickerStyle(.segmented)
-            } header: {
-                Text("Notch")
-            } footer: {
-                Text("Custom width (180–440 pt) and height (30–46 pt) keep the notch proportional without overlapping macOS menus on 13\" screens. This is the default for every display; give a display its own size in Displays.")
-            }
-
-            Section {
                 BarPreview()
             } header: {
                 Text("Preview")
+            } footer: {
+                Text("Notch size, style and visibility are in the Notch tab.")
             }
         }
         .formStyle(.grouped)

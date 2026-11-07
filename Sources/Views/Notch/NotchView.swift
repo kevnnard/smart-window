@@ -47,7 +47,7 @@ struct NotchLayout: Equatable {
     }
 
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
-        // A display with a custom size in Displays overrides the global size from Settings.
+        // A display with a custom size (Notch tab, Per display) overrides the default size.
         let size = DisplayPreferences.shared.effectiveNotchSize(
             on: DisplayIdentity.key(for: screen),
             globalWidth: AppSettings.shared.notchCustomWidth,
