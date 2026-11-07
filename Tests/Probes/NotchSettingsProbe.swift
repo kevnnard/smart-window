@@ -60,6 +60,12 @@ import Foundation
         let expandedSmall = nonNotchedLayout.panelSize(expanded: true)
         check(expandedSmall.width == 440, "expanded width is at least 440")
         check(expandedSmall.height == NotchLayout.expandedCardHeight + NotchLayout.bottomPadding, "expanded height is card height plus bottom padding")
+        check(nonNotchedLayout.expandedTopInset == 0, "cards on screens without a notch start at the top edge")
+        // On a MacBook the card grows down from the notch: the camera band stays empty on top.
+        let macBook = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 280, customHeight: 34)
+        check(macBook.expandedTopInset == 38, "cards on a notched screen reserve the notch band")
+        check(macBook.panelSize(expanded: true).height == 38 + NotchLayout.expandedCardHeight + NotchLayout.bottomPadding,
+              "notched expanded height adds the notch band above the card content")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
         // Only a very wide notch plus its minimum wings can exceed the expanded card width now.
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)

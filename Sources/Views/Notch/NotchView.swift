@@ -54,9 +54,14 @@ struct NotchLayout: Equatable {
 
     /// Window size for the compact pill or the expanded card. Shared by the view and the
     /// controller so the panel frame and the rendered content cannot diverge.
+    /// Empty band on top of the expanded card. On a notched screen the card grows down from the
+    /// notch, so the band keeps the card content out from under the camera housing.
+    var expandedTopInset: CGFloat { hasNotch ? barHeight : 0 }
+
     func panelSize(expanded: Bool) -> CGSize {
         guard expanded else { return panelSize }
-        return CGSize(width: max(contentWidth, Self.expandedMinWidth), height: Self.expandedCardHeight + Self.bottomPadding)
+        return CGSize(width: max(contentWidth, Self.expandedMinWidth),
+                      height: expandedTopInset + Self.expandedCardHeight + Self.bottomPadding)
     }
 
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
@@ -141,6 +146,21 @@ struct MarqueeText: View {
         if t < pauseSeconds + travel { return CGFloat((t - pauseSeconds) * pointsPerSecond) }
         if t < pauseSeconds * 2 + travel { return overflow }
         return overflow - CGFloat((t - pauseSeconds * 2 - travel) * pointsPerSecond)
+    }
+}
+
+// MARK: - IslandCardShape
+
+/// The expanded card: rounded only at the bottom when it hangs from the notch, otherwise a
+/// continuous rounded rectangle.
+struct IslandCardShape: Shape {
+    var radius: CGFloat
+    var attachedToTop: Bool
+
+    func path(in rect: CGRect) -> Path {
+        attachedToTop
+            ? BottomRoundedRectangle(radius: radius).path(in: rect)
+            : RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
     }
 }
 
@@ -275,7 +295,7 @@ struct NotchView: View {
         ZStack(alignment: .top) {
             if isVisible {
                 if isExpanded {
-                    expandedIslandCard(width: cardWidth)
+                    expandedIslandCard(width: cardWidth, topInset: activeLayout.expandedTopInset)
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                 } else {
                     compactContent(for: activeLayout)
@@ -422,8 +442,11 @@ struct NotchView: View {
 
     // MARK: - Expanded Dynamic Island Card
 
-    private func expandedIslandCard(width: CGFloat) -> some View {
-        VStack(spacing: 10) {
+    /// `topInset` > 0 attaches the card to the top edge below the notch band, like the native
+    /// Dynamic Island; 0 keeps a floating card with all corners rounded.
+    private func expandedIslandCard(width: CGFloat, topInset: CGFloat) -> some View {
+        let shape = IslandCardShape(radius: 22, attachedToTop: topInset > 0)
+        return VStack(spacing: 10) {
             // Header: Source Badge + App Selector Pills + Close
             HStack {
                 HStack(spacing: 6) {
@@ -590,11 +613,11 @@ struct NotchView: View {
         .padding(.bottom, 10)
         // Top-aligned so a status line appearing under the controls never shifts the rows above.
         .frame(width: width, height: NotchLayout.expandedCardHeight, alignment: .top)
+        .padding(.top, topInset)
         .background(notchBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(shape)
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.14 : 0), lineWidth: 1)
+            shape.stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.14 : 0), lineWidth: 1)
         )
         // The card floats over windows, so it keeps a shadow in both styles.
         .shadow(color: .black.opacity(0.8), radius: 24, y: 10)
