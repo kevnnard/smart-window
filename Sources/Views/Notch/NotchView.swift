@@ -67,9 +67,16 @@ struct NotchLayout: Equatable {
     var expandedWidth: CGFloat { max(contentWidth + expandedExtraWidth, Self.expandedMinWidth) }
 
 
+    /// Transparent room around the open drawer for its shadow (radius 24, offset 10), which the
+    /// window edges would otherwise cut off.
+    static let shadowMargin: CGFloat = 36
+
     /// The notch window keeps this size in both states: resizing a window redraws its content
     /// late, which moved the compact row. The part not drawn is transparent and lets clicks through.
-    var windowSize: CGSize { panelSize(expanded: true) }
+    var windowSize: CGSize {
+        let drawer = panelSize(expanded: true)
+        return CGSize(width: drawer.width + Self.shadowMargin * 2, height: drawer.height + Self.shadowMargin)
+    }
 
     /// The drawn part of the window, from its top-left corner: the compact pill, or the whole open
     /// drawer. Hover counts only here.

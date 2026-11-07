@@ -84,14 +84,19 @@ import Foundation
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
         // The window keeps the open-drawer size in both states (resizing it redraws late and moves
         // the compact row). Hover counts only over the visible part; clicks elsewhere pass through.
-        check(hugging.windowSize == hugging.panelSize(expanded: true), "the window always has the open-drawer size")
-        check(hugging.visibleRect(expanded: false) == CGRect(x: 0, y: 0, width: 249, height: 38),
+        // The window keeps a transparent margin so the open drawer's shadow is not cut off.
+        let margin = NotchLayout.shadowMargin
+        check(margin >= 24 + 10, "the margin fits the drawer shadow radius and offset")
+        check(hugging.windowSize == CGSize(width: hugging.panelSize(expanded: true).width + margin * 2,
+                                           height: hugging.panelSize(expanded: true).height + margin),
+              "the window always has the open-drawer size plus the shadow margin")
+        check(hugging.visibleRect(expanded: false) == CGRect(x: margin, y: 0, width: 249, height: 38),
               "compact hover area is the pill at the top")
-        check(hugging.visibleRect(expanded: true) == CGRect(x: 0, y: 0, width: 249, height: 38 + NotchLayout.expandedCardHeight),
+        check(hugging.visibleRect(expanded: true) == CGRect(x: margin, y: 0, width: 249, height: 38 + NotchLayout.expandedCardHeight),
               "open hover area is the whole drawer")
         var spacious = hugging
         spacious.expandedExtraWidth = 100
-        check(spacious.visibleRect(expanded: false) == CGRect(x: 50, y: 0, width: 249, height: 38),
+        check(spacious.visibleRect(expanded: false) == CGRect(x: margin + 50, y: 0, width: 249, height: 38),
               "the compact pill is centered in a window widened for the drawer")
         let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
