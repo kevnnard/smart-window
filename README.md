@@ -9,7 +9,7 @@
 A native SwiftUI menu bar overlay inspired by Polybar and Waybar.<br/>
 Switch windows by number, keep your music in sight, and make the bar yours.
 
-[![Release](https://img.shields.io/badge/release-v0.3.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.3.0)
+[![Release](https://img.shields.io/badge/release-v0.4.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.4.0)
 [![macOS](https://img.shields.io/badge/macOS-13%2B-black?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 [![Homebrew](https://img.shields.io/badge/Homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew&logoColor=black)](#quick-start)
 [![License](https://img.shields.io/badge/license-non--commercial-blue?style=for-the-badge)](LICENSE)
@@ -26,8 +26,8 @@ Switch windows by number, keep your music in sight, and make the bar yours.
   <img width="1509" height="27" alt="Close-up of the SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
 </p>
 
-> **v0.3.0:** the release includes the features below in a signed, notarized
-> **Apple Silicon (arm64)** bundle. See the [release notes](Resources/ReleaseNotes-0.3.0.md)
+> **v0.4.0:** the release includes the features below in a signed, notarized
+> **Apple Silicon (arm64)** bundle. See the [release notes](Resources/ReleaseNotes-0.4.0.md)
 > for changes and known validation limits. Intel users must build from source.
 > The screenshots above are existing project images, not a preview of every setting.
 
@@ -104,19 +104,31 @@ This setting persists across relaunches and is also available in Settings → Ge
 
 ### Now Playing
 
-A compact badge sits around the MacBook notch or below the top edge on displays
-without a notch.
+A compact notch wraps the MacBook camera notch, or sits below the top edge on
+displays without one. Hover or click it to open a drawer below with the artwork,
+track, controls and every app currently playing.
 
-- **Spotify and Apple Music:** track title and artist, with Spotify artwork when available.
-- **Playing or paused:** animated activity while playing, a pause indicator when paused.
-- **Persistent presence:** the badge stays while a supported player is open and disappears when it quits.
-- **Click to return:** click the artwork, title, or artist to bring the player forward.
-- **Playback controls:** click the waveform / pause indicator for previous, play/pause,
-  and next. Controls target the running supported player; failures are shown in the popover.
-- **Readable by design:** long text scrolls only when needed; the badge is black by default.
+<p align="center">
+  <img width="640" alt="Compact SmartWindow notch around the MacBook camera" src="docs/images/notch-compact.png" />
+</p>
+<p align="center">
+  <img width="640" alt="Open SmartWindow notch drawer with artwork, controls and source badges" src="docs/images/notch-expanded.png" />
+</p>
 
-Automation permission is required. Browser media such as YouTube in Chrome or
-Safari is **not supported** by the current player integration.
+- **Every Now Playing session:** Spotify, Music and browser media such as YouTube are
+  read from macOS Now Playing, with title, artist, progress and artwork.
+- **Stays put:** the compact row never moves; the details open underneath it, and the
+  drawer closes shortly after the pointer leaves.
+- **Choose the main source:** with several apps playing, a badge per app selects which
+  one the notch shows.
+- **Safe controls:** previous, play/pause and next target Spotify and Music directly. Other
+  apps are controlled only while macOS reports them as the current Now Playing app;
+  otherwise the controls are disabled with the reason, so another app is never paused.
+- **Click to return:** click the artwork to bring the player forward.
+
+On a MacBook the notch is pure black, has no pixels over the camera, and its width
+includes the camera notch. Automation permission is required to control Spotify and
+Music. Paused browser tabs do not get a badge.
 
 ### System widgets
 
@@ -146,14 +158,15 @@ A resizable window with a System Settings-style sidebar keeps controls grouped b
 | Pane | Controls |
 |:---|:---|
 | **General** | Shortcut reference, app version, and Accessibility permission status |
-| **Appearance** | Bar opacity from 60–100%, black or bar-colored Now Playing badge, and a live preview |
+| **Appearance** | Bar opacity from 60–100% and a live preview |
 | **Widgets** | Global visibility, drag-to-reorder, separators, and temperature unit |
-| **Displays** | Per-monitor widget and Now Playing visibility: Default, Show, or Hide |
+| **Notch** | Visibility (all displays, main display only, or per display), black or bar-colored style, default and per-display size, and expanded width |
+| **Displays** | Per-monitor widget visibility: Default, Show, or Hide |
 | **Clock** | Displayed timezone and searchable extra timezones |
 | **Tailscale** | Installation / connection status, tailnet details, and the widget toggle |
 
-The bar defaults to a neutral dark surface at **94% opacity**; the Now Playing
-badge defaults to **black**. Appearance and widget preferences persist between launches.
+The bar defaults to a neutral dark surface at **94% opacity**; the notch defaults
+to **black**. Appearance and widget preferences persist between launches.
 
 **Launch at login** registers the installed app with macOS Login Items using
 `SMAppService`. macOS may require approval in System Settings; the General pane
@@ -161,12 +174,16 @@ shows that state and offers a link. Registration errors do not turn into a fake
 successful toggle. This control is unavailable in an unbundled debug executable.
 An old saved startup preference does not automatically register the app.
 
-In **Displays**, choose a connected monitor and override each widget or Now Playing.
+In **Displays**, choose a connected monitor and override each widget.
 **Default** follows global settings; **Show** and **Hide** take precedence on that
 monitor. Overrides use the display's CoreGraphics UUID and are retained across
 reconnection. Widget order, clock settings and separators remain global.
-"Use Defaults for This Display" resets only that monitor's overrides. Disabling
-"Show Now Playing by default" still allows explicit Show on a chosen monitor.
+"Use Defaults for This Display" resets only that monitor's overrides.
+
+Every notch setting lives in **Notch**, including which monitors show it and a
+custom size per monitor. A monitor set to Show or Hide there ignores the Default
+setting. On a MacBook screen, status widgets that do not fit beside the notch scroll
+horizontally; the clock stays visible at the right edge.
 
 ## Keyboard input
 
@@ -232,7 +249,7 @@ Shortcuts are global, so you can use them while another app is focused.
 | Symptom | What to check |
 |:---|:---|
 | Windows are missing or tabs do not focus them | Enable SmartWindow in System Settings → Privacy & Security → Accessibility |
-| No Now Playing badge with a supported player running | Approve SmartWindow's request to control Spotify or Music under Privacy & Security → Automation |
+| Spotify or Music controls do nothing | Approve SmartWindow's request to control Spotify or Music under Privacy & Security → Automation |
 | Volume shows `--` | Some HDMI / DisplayPort outputs expose no software volume control |
 | Temperature shows `--` | The current Mac or macOS version may not expose a readable sensor |
 | No Tailscale widget | Enable it in Settings and check that Tailscale is installed in a supported CLI location |
@@ -338,8 +355,8 @@ swiftc Sources/Models/FocusMode.swift Sources/Models/DisplayPreferences.swift Te
 ```
 
 Hardware readings, player permissions, and UI behavior still need checks on a real
-Mac. Physical-notch geometry has not yet been verified live; recent visual checks
-used an external display.
+Mac. The notch was checked on a 14" MacBook display alongside an external monitor;
+other MacBook sizes have not been checked.
 
 <details>
 <summary><strong>Repository map</strong></summary>
@@ -402,10 +419,9 @@ The same signing identity variable also applies to `scripts/install-app.sh`.
 
 ## Roadmap
 
-- Verify physical-notch layout on an open MacBook display.
 - Improve overflow behavior with many window tabs.
 - Expand hardware and macOS compatibility checks.
-- Validate physical-notch hardware, monitor reconnection and installed login-item flows.
+- Validate other MacBook notch sizes, monitor reconnection and installed login-item flows.
 
 ## License
 
@@ -425,7 +441,9 @@ Under the [SmartWindow Public Non-Commercial License v1.1](LICENSE):
 
 Source availability is not permission for commercial use. This is a custom
 non-commercial, source-available license, not an open-source license.
-Third-party components remain subject to their own licenses.
+Third-party components remain subject to their own licenses, including the
+BSD-3-Clause [mediaremote-adapter](Vendor/mediaremote-adapter/LICENSE) used to read
+Now Playing sessions.
 The full terms in `LICENSE` govern; this section is a summary.
 
 Copyright © 2026 Kevnnard.
