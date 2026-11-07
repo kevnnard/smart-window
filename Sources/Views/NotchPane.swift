@@ -56,7 +56,7 @@ struct NotchPane: View {
             } header: {
                 Text("Default size")
             } footer: {
-                Text("Used by every display set to Default. Width 180–440 pt and height 30–46 pt keep the notch clear of the menus on a 13\" screen.")
+                Text("Used by every display set to Default. On a MacBook the width includes the camera notch. Width 180–440 pt and height 30–46 pt keep the notch clear of the menus on a 13\" screen.")
             }
 
             displaySection
@@ -119,7 +119,7 @@ struct NotchPane: View {
             } footer: {
                 Text(custom == nil
                      ? "This display uses the default size. Choose Custom to give it its own size. Settings follow the display when it reconnects."
-                     : "On a MacBook notch the width sizes the wings around the camera; on other displays it is the notch width.")
+                     : "On a MacBook the width includes the camera notch, so the smallest value hugs it; narrow sides show only the artwork and the playback indicator.")
             }
         }
     }

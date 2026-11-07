@@ -24,12 +24,25 @@ struct NotchLayout: Equatable {
         hasNotch ? max(physicalBarHeight, customHeight) : customHeight
     }
 
-    /// Content width on each side of the notch (notched screens).
-    /// Scales proportionally with customWidth: 150pt wing at default 280pt customWidth.
+    /// Smallest wing beside the camera notch: room for the artwork or the playback indicator.
+    static let minWingWidth: CGFloat = 32
+    /// Wing width from which the title and artist fit next to the artwork.
+    static let wingTextWidth: CGFloat = 80
+    /// Wing width from which the source name fits next to the playback indicator.
+    static let wingLabelWidth: CGFloat = 90
+
+    /// Content width on each side of the notch (notched screens). The configured width is the
+    /// total width, notch included, so the wings take what is left on each side. Nothing can be
+    /// drawn over the notch itself: the camera housing has no pixels.
     var wingWidth: CGFloat {
         guard hasNotch else { return 0 }
-        return max(50, (customWidth / CGFloat(AppSettings.notchDefaultWidth)) * 150.0)
+        return max(Self.minWingWidth, (customWidth - notchWidth) / 2)
     }
+
+    /// Whether the left wing has room for the title (always true without a notch).
+    var showsWingText: Bool { !hasNotch || wingWidth >= Self.wingTextWidth }
+    /// Whether the right wing has room for the source name (always true without a notch).
+    var showsSourceLabel: Bool { !hasNotch || wingWidth >= Self.wingLabelWidth }
 
     var contentWidth: CGFloat {
         hasNotch ? notchWidth + wingWidth * 2 : customWidth
@@ -299,11 +312,11 @@ struct NotchView: View {
         if activeLayout.hasNotch {
             if nowPlaying.hasPlayer {
                 HStack(spacing: 0) {
-                    compactLeftInfo
+                    compactLeftInfo(showsText: activeLayout.showsWingText)
                         .frame(width: activeLayout.wingWidth)
                     Color.clear
                         .frame(width: activeLayout.notchWidth)
-                    compactRightInfo
+                    compactRightInfo(showsLabel: activeLayout.showsSourceLabel)
                         .frame(width: activeLayout.wingWidth)
                 }
             } else {
@@ -316,9 +329,9 @@ struct NotchView: View {
         } else {
             if nowPlaying.hasPlayer {
                 HStack(spacing: 10) {
-                    compactLeftInfo
+                    compactLeftInfo(showsText: true)
                     Spacer(minLength: 0)
-                    compactRightInfo
+                    compactRightInfo(showsLabel: true)
                 }
                 .padding(.horizontal, 10)
             } else {
@@ -327,7 +340,8 @@ struct NotchView: View {
         }
     }
 
-    private var compactLeftInfo: some View {
+    /// Artwork, plus title and artist when the wing is wide enough.
+    private func compactLeftInfo(showsText: Bool) -> some View {
         HStack(spacing: 7) {
             ZStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -345,6 +359,7 @@ struct NotchView: View {
             .frame(width: 17, height: 17)
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
 
+            if showsText {
             VStack(alignment: .leading, spacing: 1) {
                 MarqueeText(
                     text: nowPlaying.trackTitle.isEmpty ? nowPlaying.sourceDisplayName : nowPlaying.trackTitle,
@@ -362,17 +377,22 @@ struct NotchView: View {
                     .frame(height: 11)
                 }
             }
+            }
         }
         .padding(.leading, 8)
         .padding(.trailing, 4)
+        .frame(maxWidth: .infinity, alignment: showsText ? .leading : .center)
     }
 
-    private var compactRightInfo: some View {
+    /// Playback indicator, plus the source name when the wing is wide enough.
+    private func compactRightInfo(showsLabel: Bool) -> some View {
         HStack(spacing: 6) {
-            Text(nowPlaying.sourceDisplayName.uppercased())
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.4))
-                .lineLimit(1)
+            if showsLabel {
+                Text(nowPlaying.sourceDisplayName.uppercased())
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+                    .lineLimit(1)
+            }
 
             if nowPlaying.isPlaying {
                 WaveformBars(color: sourceAccentColor)
@@ -383,7 +403,8 @@ struct NotchView: View {
                     .foregroundColor(.white.opacity(0.45))
             }
         }
-        .padding(.trailing, 10)
+        .padding(.trailing, showsLabel ? 10 : 0)
+        .frame(maxWidth: .infinity, alignment: showsLabel ? .trailing : .center)
     }
 
     private var idleNotchContent: some View {

@@ -36,8 +36,20 @@ import Foundation
         // Test notched screen layout
         let notchedLayout = NotchLayout(notchWidth: 180, physicalBarHeight: 38, customWidth: 280, customHeight: 34)
         check(notchedLayout.hasNotch, "notched hasNotch is true")
-        check(abs(notchedLayout.wingWidth - 150) < 0.01, "default wingWidth is 150")
-        check(abs(notchedLayout.contentWidth - (180 + 300)) < 0.01, "default notched content width is notch + 2 * wing")
+        // On a notched screen the width is the total width, camera notch included.
+        check(abs(notchedLayout.wingWidth - 50) < 0.01, "wings take what is left beside the notch")
+        check(abs(notchedLayout.contentWidth - 280) < 0.01, "notched content width equals the configured width")
+        let tightest = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 180, customHeight: 34)
+        check(tightest.wingWidth == NotchLayout.minWingWidth
+              && tightest.contentWidth == 185 + 2 * NotchLayout.minWingWidth,
+              "minimum width hugs the notch with the smallest wings")
+        let widest = NotchLayout(notchWidth: 185, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
+        check(abs(widest.wingWidth - 127.5) < 0.01 && abs(widest.contentWidth - 440) < 0.01,
+              "maximum width never exceeds the configured width")
+        check(!tightest.showsWingText && !tightest.showsSourceLabel, "narrow wings show only icon and indicator")
+        check(widest.showsWingText && widest.showsSourceLabel, "wide wings show title and source")
+        check(NotchLayout(notchWidth: 0, physicalBarHeight: 34, customWidth: 180, customHeight: 34).showsWingText,
+              "screens without a notch always show the title")
         check(notchedLayout.barHeight == 38, "notched barHeight does not shrink below physical inset (38)")
 
         let customNotched = NotchLayout(notchWidth: 180, physicalBarHeight: 38, customWidth: 280, customHeight: 44)
@@ -49,7 +61,8 @@ import Foundation
         check(expandedSmall.width == 440, "expanded width is at least 440")
         check(expandedSmall.height == NotchLayout.expandedCardHeight + NotchLayout.bottomPadding, "expanded height is card height plus bottom padding")
         check(NotchLayout.expandedCardHeight == 180, "expanded card height is 180")
-        let wide = NotchLayout(notchWidth: 200, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
+        // Only a very wide notch plus its minimum wings can exceed the expanded card width now.
+        let wide = NotchLayout(notchWidth: 400, physicalBarHeight: 38, customWidth: 440, customHeight: 34)
         check(wide.contentWidth > 440, "wide layout content is wider than 440")
         check(wide.panelSize(expanded: true).width == wide.contentWidth, "expanded width never below contentWidth")
         check(wide.panelSize(expanded: true).width >= wide.panelSize(expanded: false).width, "expanded never narrower than compact")
