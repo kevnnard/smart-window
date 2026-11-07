@@ -270,15 +270,33 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     }
 
     /// Rebuilds the hover area after the drawer opens or closes or the window moves.
-    func refreshHoverArea() { updateTrackingAreas() }
+    func refreshHoverArea() {
+        updateTrackingAreas()
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        // Only the compact pill opens the drawer. Do not advertise the transparent window
+        // area or the expanded card's non-interactive background as clickable.
+        guard !panelState.isExpanded else { return }
+        addCursorRect(visibleInteractionRect, cursor: .pointingHand)
+    }
+
+    /// Layout geometry starts at the top-left. NSHostingView is flipped, so its coordinates
+    /// already match; invert Y only for a non-flipped hosting view.
+    private var visibleInteractionRect: NSRect {
+        let visible = hoverRect()
+        return NSRect(x: bounds.minX + visible.minX,
+                      y: isFlipped ? bounds.minY + visible.minY : bounds.maxY - visible.maxY,
+                      width: visible.width, height: visible.height).intersection(bounds)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea { removeTrackingArea(hoverArea) }
         // Only the drawn pill or drawer counts as hover; the rest of the window is transparent.
-        let visible = hoverRect()
-        let rect = NSRect(x: visible.minX, y: bounds.height - visible.maxY, width: visible.width, height: visible.height)
-        let area = NSTrackingArea(rect: rect, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        let area = NSTrackingArea(rect: visibleInteractionRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
         addTrackingArea(area)
         hoverArea = area
     }
