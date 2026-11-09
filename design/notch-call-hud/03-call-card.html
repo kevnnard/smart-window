@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call HUD: Call card</title>
+<style>
+:root{--bg:#090a0f;--text:#f5f5f7;--muted:rgba(245,245,247,.62);--border:rgba(255,255,255,.12);--surface:#15171f;--focus:#5ea1ff;
+  --green:#30d158;--red:#ff453a;--off:rgba(245,245,247,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
+header{padding:28px 40px 0}
+h1{font-size:20px;margin:0;font-weight:650}
+h2{font-size:15px;margin:0 0 4px;font-weight:650}
+.tradeoff{color:var(--muted);margin:6px 0 0;max-width:960px}
+.desk{background:radial-gradient(120% 90% at 20% 110%,#c2606b 0,transparent 55%),radial-gradient(90% 80% at 85% 100%,#e0a458 0,transparent 50%),linear-gradient(160deg,#16243f,#3b2a5c 55%,#5b2f55)}
+.desk.ext{background:radial-gradient(110% 90% at 80% 110%,#3f7f8c 0,transparent 55%),radial-gradient(90% 80% at 10% 100%,#5a6bb8 0,transparent 50%),linear-gradient(160deg,#101a2c,#1f2c4a 55%,#2d2448)}
+.stage{margin:22px 40px 0;height:380px;border-radius:16px;overflow:hidden;position:relative;border:1px solid var(--border)}
+.stage .window{position:absolute;left:50%;top:80px;width:520px;margin-left:-260px;height:400px;border-radius:12px;background:rgba(28,30,40,.92);border:1px solid rgba(255,255,255,.1)}
+.stage .window::before{content:"";position:absolute;left:14px;top:12px;width:40px;height:10px;background:radial-gradient(circle at 5px 5px,#ff5f57 4.5px,transparent 5px),radial-gradient(circle at 20px 5px,#febc2e 4.5px,transparent 5px),radial-gradient(circle at 35px 5px,#28c840 4.5px,transparent 5px)}
+.screen{position:absolute;top:0;left:50%;width:760px;transform:translateX(-50%) scale(1.6);transform-origin:top center}
+.menubar{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:12px;color:rgba(255,255,255,.92);background:rgba(15,15,25,.32)}
+.menubar .apps{display:flex;gap:14px}.menubar .apps b{font-weight:650}
+.menubar .status{display:flex;gap:10px;font-variant-numeric:tabular-nums}
+.ext .menubar{height:25px}
+.camera{position:absolute;top:0;left:50%;width:185px;height:32px;transform:translateX(-50%);background:#000;border-radius:0 0 10px 10px;z-index:3}
+.camera::after{content:"";position:absolute;left:50%;top:11px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#2b3350,#05060a 70%)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);height:32px;width:280px;background:#000;border-radius:0 0 12px 12px;z-index:2;overflow:hidden;
+  transition:width .46s cubic-bezier(.3,1.35,.45,1),height .42s cubic-bezier(.3,1.25,.45,1),border-radius .3s ease}
+.ext .notch{width:200px}
+.wing{position:absolute;top:0;height:32px;width:calc(50% - 92.5px)}
+.ext .wing{width:50%}
+.wing.left{left:0}.wing.right{right:0}
+.layer{position:absolute;inset:0;display:flex;align-items:center;gap:7px;transition:opacity .16s ease,transform .3s cubic-bezier(.3,1.35,.45,1)}
+.left .layer{justify-content:flex-start;padding:0 8px 0 12px}
+.right .layer{justify-content:flex-end;padding:0 12px 0 8px}
+.ext .left .layer{padding-right:6px}.ext .right .layer{padding-left:6px}
+.idle .layer.music{opacity:1}
+.layer.call,.layer.ended{opacity:0;transform:scale(.7)}
+.notch.call .layer.music,.notch.ended .layer.music{opacity:0;transform:scale(.85)}
+.notch.call .layer.call{opacity:1;transform:none;transition-delay:.08s}
+.notch.ended .layer.ended{opacity:1;transform:none;transition-delay:.08s}
+.art{width:17px;height:17px;border-radius:4px;background:linear-gradient(135deg,#1db954,#0b6b30 60%,#043d1b)}
+.eq{display:flex;gap:2px;align-items:flex-end;height:12px}
+.eq i{width:2.5px;background:#1db954;border-radius:1px;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}.eq i:nth-child(4){animation-delay:-.15s}
+@keyframes eq{0%,100%{height:3px}50%{height:12px}}
+.badge{flex:none;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#fff;background:var(--app,#30d158)}
+.badge svg{width:11px;height:11px;display:block}
+.badge.end{background:var(--red)}
+.badge{overflow:visible;position:relative;background:var(--app,#30d158);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12)}
+.badge svg{width:13px;height:13px}
+.badge.full svg{width:18px;height:18px}
+.badge .via{position:absolute;right:-4px;bottom:-4px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px #000;display:grid;place-items:center}
+.badge .via svg{width:10px;height:10px}
+.cardbody .via-txt{color:var(--muted);font-weight:500}
+
+.wave{display:flex;align-items:center;gap:2px;height:16px}
+.wave i{display:block;width:2.5px;height:3px;border-radius:2px;background:var(--green);transition:height .09s linear}
+.timer{font-size:12px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap}
+.endtxt{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:650;color:var(--off);white-space:nowrap;font-variant-numeric:tabular-nums}
+.endtxt b{color:var(--red);font-weight:650}
+/* Gallery */
+section.block{margin:34px 40px 0}
+.block > p{color:var(--muted);margin:0 0 14px;font-size:13px;max-width:960px}
+.grid{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px 22px;align-items:center}
+.grid .colh{font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.rowh{font-size:13px;font-weight:650}
+.rowh small{display:block;font-weight:400;color:var(--muted);font-size:12px;line-height:1.35;margin-top:2px}
+.tile{margin:0;height:74px;border-radius:10px;overflow:hidden;position:relative;border:1px solid var(--border)}
+.tile.tall{height:176px}
+.tile .screen{width:490px;transform:translateX(-50%) scale(1.15)}
+.tile .menubar{font-size:0}
+.tile .wave i{transition:none}
+.panel{margin:20px 40px 0;display:grid;grid-template-columns:1.1fr 1fr;gap:28px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;width:100%}
+.seg label{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:7px;font-size:13px;color:var(--muted);cursor:pointer}
+.seg input{accent-color:var(--focus)}
+button{background:#22252f;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
+button:hover{background:#2b2f3b}
+button[aria-pressed="true"]{border-color:var(--green);color:var(--green)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.notes{color:var(--muted);font-size:13px;margin:0;padding-left:18px}
+.notes li{margin-bottom:5px}
+.notes b{color:var(--text);font-weight:600}
+footer{height:40px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation:none!important}}
+
+.notch.call,.notch.ended{width:440px}
+.ext .notch.call,.ext .notch.ended{width:360px}
+.notch.card{width:400px!important;height:134px;border-radius:0 0 24px 24px;box-shadow:0 10px 24px rgba(0,0,0,.45)}
+.notch.card .wing .layer{justify-content:center}
+.cardbody{position:absolute;top:32px;left:0;right:0;height:102px;padding:2px 18px 12px;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .35s cubic-bezier(.3,1.35,.45,1);display:grid;grid-template-rows:auto 1fr auto;justify-items:center}
+.notch.card .cardbody{opacity:1;transform:none;transition-delay:.14s}
+.cardbody .title{font-size:12px;font-weight:650;display:flex;gap:6px;align-items:center;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.cardbody .sub{color:var(--muted);font-weight:500}
+.bigwave{display:flex;align-items:center;gap:3px;height:40px}
+.bigwave i{display:block;width:3px;height:3px;border-radius:2px;background:var(--green);transition:height .09s linear}
+.bigtimer{font-size:18px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+.bigtimer.end{color:var(--off);font-size:14px}
+.bigtimer.end b{color:var(--red)}
+.card-ended .bigwave{display:none}
+.notch:not(.ended) .only-ended,.notch.ended .only-call{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Call HUD · Call card</h1>
+  <p class="tradeoff"><b>Tradeoff:</b> Most expressive: a big card at the start and end of the call and on hover, wings in between; more motion and covers windows for a moment.</p>
+</header>
+<main>
+<section aria-labelledby="sim-h">
+  <h2 class="sr" id="sim-h">Live simulation</h2>
+  <div class="stage desk"><div class="window"></div><div class="screen"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="camera"></div><div class="notch " id="notch" data-base="notch" role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge" data-live="badge" style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave" data-live="wave" data-max="16" aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" data-live="timer">04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span data-live="app">FaceTime</span><span class="sub only-call">· Call</span><span class="via-txt" data-live="viatxt"></span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call" data-live="wave" data-max="38" aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span data-live="total">12:04</span></span>
+    <span class="bigtimer only-call" data-live="timer">04:27</span>
+  </div>
+</div></div></div>
+  <div class="panel">
+    <div class="controls" role="group" aria-label="Simulate a call">
+      <div class="seg" role="radiogroup" aria-label="Call app"><label><input type="radio" name="app" value="facetime" checked> FaceTime</label><label><input type="radio" name="app" value="zoom"> Zoom</label><label><input type="radio" name="app" value="whatsapp"> WhatsApp</label><label><input type="radio" name="app" value="teams"> Teams</label><label><input type="radio" name="app" value="meet"> Meet in Chrome</label><label><input type="radio" name="app" value="web"> Unknown site in Chrome</label></div>
+      <button id="start" type="button">Start call</button>
+      <button id="hang" type="button">Hang up</button>
+      <button type="button" data-talk="auto" aria-pressed="true">Voice: natural</button>
+      <button type="button" data-talk="on" aria-pressed="false">Voice: talking</button>
+      <button type="button" data-talk="off" aria-pressed="false">Voice: silent</button>
+      <label style="font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px">Start at <input id="elapsed" type="number" min="0" value="0" step="60" style="width:70px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px"> s</label>
+      
+    </div>
+    <ul class="notes"><li><b>Start</b>: the card drops for 3 s with the app name, a big waveform and the timer, then folds into the wings of 01.</li>
+<li><b>During</b>: compact wings, like 01. Hovering the notch brings the card back instead of the media drawer.</li>
+<li><b>Icons</b>: each app shows its own icon, taken from the installed app, so it is always the official one.</li>
+<li><b>Browser calls</b>: when a browser holds the mic, the browser window title names the service (Meet, Zoom, Teams, Webex, WhatsApp Web) with a small browser mark; an unknown site keeps the browser icon. Uses the Accessibility permission the app already has.</li>
+<li><b>Waveform</b>: 24 bars in the card, 7 in the wings, from your mic level (Microphone permission).</li>
+<li><b>Hang up</b>: the card drops again with "Call ended" and the total, 2.5 s.</li>
+<li><b>Cost</b>: the most motion and the biggest shape; covers the top of windows for 3 s at start and end.</li></ul>
+  </div>
+  <p id="live" class="sr" aria-live="polite"></p>
+</section>
+<section class="block" aria-labelledby="g-h"><h2 id="g-h">States</h2><p>Static snapshots of every state, on a MacBook with a camera notch and on an external monitor without one.</p><div class="grid"><span></span><span class="colh">MacBook</span><span class="colh">External monitor</span><div class="rowh">Call starts<small>Card drops for 3 s: app, live waveform, timer.</small></div><figure class="tile tall"><div class="screen desk"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="camera"></div><div class="notch call card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >00:02</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:30px"></i><i style="height:24px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:34px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:20px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:6px"></i><i style="height:4px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >00:02</span>
+  </div>
+</div></div></figure><figure class="tile tall"><div class="screen desk ext"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="notch call card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >00:02</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:30px"></i><i style="height:24px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:34px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:20px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:6px"></i><i style="height:4px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >00:02</span>
+  </div>
+</div></div></figure><div class="rowh">During the call<small>Card folds into wings: badge, small waveform, green timer.</small></div><figure class="tile"><div class="screen desk"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="camera"></div><div class="notch call"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure><figure class="tile"><div class="screen desk ext"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="notch call"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure><div class="rowh">Hover during the call<small>The card comes back while the pointer is on the notch.</small></div><figure class="tile tall"><div class="screen desk"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="camera"></div><div class="notch call card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:30px"></i><i style="height:24px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:34px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:20px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:6px"></i><i style="height:4px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure><figure class="tile tall"><div class="screen desk ext"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="notch call card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:5px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:4px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:30px"></i><i style="height:24px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:34px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:20px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:6px"></i><i style="height:4px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure><div class="rowh">Hung up<small>Card drops with Call ended and the total for 2.5 s.</small></div><figure class="tile tall"><div class="screen desk"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="camera"></div><div class="notch ended card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure><figure class="tile tall"><div class="screen desk ext"><div class="menubar"><span class="apps"><b>&#63743;</b><b>FaceTime</b><span>File</span><span>Edit</span><span>View</span></span><span class="status"><span>62%</span><span>Wed 10:42</span></span></div><div class="notch ended card"  role="status" aria-label="Notch">
+  <div class="wing left">
+    <div class="layer music"><span class="art"></span></div>
+    <div class="layer call"><span class="badge"  style="--app:linear-gradient(180deg,#5cf777,#0ac43b)"><svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z"/></svg></span><span class="wave"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span></div>
+    <div class="layer ended"><span class="badge end"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.1A1 1 0 0 1 0 12.4c0-.3.1-.5.3-.7A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.8 11.7 4.7.2.2.3.4.3.7s-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></span></div>
+  </div>
+  <div class="wing right">
+    <div class="layer music"><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+    <div class="layer call"><span class="timer" >04:27</span></div>
+    <div class="layer ended"><span class="endtxt"><b>Ended</b></span></div>
+  </div>
+  <div class="cardbody">
+    <div class="title"><span >FaceTime</span><span class="sub only-call">· Call</span><span class="sub only-ended">· Call ended</span></div>
+    <span class="bigwave only-call"  aria-hidden="true"><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></span>
+    <span class="bigtimer only-ended end" style="align-self:center"><span >12:04</span></span>
+    <span class="bigtimer only-call" >04:27</span>
+  </div>
+</div></div></figure></div></section>
+</main>
+<footer></footer>
+<script>
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const APPS = {"facetime": {"name": "FaceTime", "bg": "linear-gradient(180deg,#5cf777,#0ac43b)", "icon": "<svg viewBox=\"0 0 24 24\" fill=\"#fff\" aria-hidden=\"true\"><path d=\"M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm14 3.2 4-2.7v9l-4-2.7z\"/></svg>"}, "zoom": {"name": "Zoom", "bg": "#0b5cff", "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"1.5\" y=\"1.5\" width=\"21\" height=\"21\" rx=\"10.5\" fill=\"#fff\"/><path d=\"M5.5 9a1.5 1.5 0 0 1 1.5-1.5h6a2.5 2.5 0 0 1 2.5 2.5v5a0 0 0 0 1 0 0H9A3.5 3.5 0 0 1 5.5 11.5z\" fill=\"#0b5cff\"/><path d=\"m16.2 11 2.8-2v6l-2.8-2z\" fill=\"#0b5cff\"/></svg>"}, "whatsapp": {"name": "WhatsApp", "bg": "#25d366", "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.2 20.8l4.5-1.2A8.8 8.8 0 1 0 12 3.2z\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\"/><path d=\"M9.2 7.8c.3 0 .5 0 .7.5l.8 1.8c.1.3 0 .5-.1.7l-.6.7c.6 1.2 1.6 2.2 2.8 2.8l.7-.6c.2-.2.4-.2.7-.1l1.8.8c.4.2.5.4.5.7 0 1-.8 1.9-1.9 1.9A7 7 0 0 1 7.5 10c0-1.1.9-2.2 1.7-2.2z\" fill=\"#fff\"/></svg>"}, "teams": {"name": "Teams", "bg": "#5059c9", "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"17.6\" cy=\"7\" r=\"2.3\" fill=\"#c5cbfa\"/><rect x=\"14.5\" y=\"10\" width=\"7\" height=\"7.5\" rx=\"3\" fill=\"#7b83eb\"/><rect x=\"2.5\" y=\"5.5\" width=\"12\" height=\"12\" rx=\"1.6\" fill=\"#fff\"/><path d=\"M5.5 8.5h6v1.8H9.4V15H7.6v-4.7H5.5z\" fill=\"#5059c9\"/></svg>"}, "meet": {"name": "Google Meet", "bg": "#fff", "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 9.5 7 5.5h7v4.2H7z\" fill=\"#ea4335\"/><path d=\"M3 9.5h4v5H3z\" fill=\"#4285f4\"/><path d=\"M3 14.5h4v4H5a2 2 0 0 1-2-2z\" fill=\"#1967d2\"/><path d=\"M7 14.3h7v4.2H7z\" fill=\"#34a853\"/><path d=\"M14 5.5v13a0 0 0 0 0 0 0 2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2z\" fill=\"#188038\"/><path d=\"M14 9.7h0 7 0 0V7.2l-5 4z\" fill=\"none\"/><path d=\"m16 10.5 5-3.6v10.2l-5-3.6z\" fill=\"#00832d\"/><path d=\"M7 9.7h7v4.6H7z\" fill=\"#fff\"/><path d=\"M7 5.5h7v4.2H7z\" fill=\"#fbbc04\"/></svg>", "via": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"#db4437\"/><path d=\"M12 12 3.3 7a10 10 0 0 0 4 13.6z\" fill=\"#0f9d58\"/><path d=\"M12 12h8.7a10 10 0 0 1-13.3 8.6z\" fill=\"#ffcd40\"/><path d=\"M12 12h8.7A10 10 0 0 0 20 7H12z\" fill=\"#db4437\"/><circle cx=\"12\" cy=\"12\" r=\"4.6\" fill=\"#fff\"/><circle cx=\"12\" cy=\"12\" r=\"3.6\" fill=\"#4285f4\"/></svg>", "viaName": "Chrome"}, "web": {"name": "Chrome", "bg": "#fff", "icon": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"#db4437\"/><path d=\"M12 12 3.3 7a10 10 0 0 0 4 13.6z\" fill=\"#0f9d58\"/><path d=\"M12 12h8.7a10 10 0 0 1-13.3 8.6z\" fill=\"#ffcd40\"/><path d=\"M12 12h8.7A10 10 0 0 0 20 7H12z\" fill=\"#db4437\"/><circle cx=\"12\" cy=\"12\" r=\"4.6\" fill=\"#fff\"/><circle cx=\"12\" cy=\"12\" r=\"3.6\" fill=\"#4285f4\"/></svg>", "full": true}};
+let state = 'idle', start = 0, speaking = 'auto', talkPhase = 0, endTimer = null, endedAt = 0;
+const notch = document.getElementById('notch');
+const timers = () => document.querySelectorAll('[data-live="timer"]');
+const waves = () => document.querySelectorAll('[data-live="wave"] i');
+const live = document.getElementById('live');
+function fmt(ms){const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s/60)%60,x=s%60;return (h?h+':'+String(m).padStart(2,'0'):String(m).padStart(2,'0'))+':'+String(x).padStart(2,'0');}
+// The badge is the app's own icon (in the app: NSWorkspace's icon of the installed app). A call in a
+// browser names the service read from the browser window title (Meet, Zoom, Teams…) with a small
+// browser mark; an unknown site keeps the browser.
+function setApp(key){const a=APPS[key];document.querySelectorAll('[data-live="app"]').forEach(e=>e.textContent=a.name);
+  document.querySelectorAll('[data-live="viatxt"]').forEach(e=>e.textContent=a.viaName?'· in '+a.viaName:'');
+  document.querySelectorAll('[data-live="badge"]').forEach(e=>{e.style.setProperty('--app',a.bg);e.classList.toggle('full',!!a.full);
+    e.innerHTML=a.icon+(a.via?'<span class="via">'+a.via+'</span>':'');});}
+function level(t){
+  if(speaking==='on') return .55+.45*Math.abs(Math.sin(t/140))*Math.random();
+  if(speaking==='off') return .04;
+  // auto: bursts of speech with pauses
+  const phase = Math.floor(t/1800)%3; return phase===2 ? .04 : .35+.65*Math.random()*Math.abs(Math.sin(t/120));
+}
+function tick(t){
+  if(state==='call'){
+    const el=fmt(Date.now()-start); timers().forEach(e=>e.textContent=el);
+    const lv=reduce?.3:level(t); const bars=waves();
+    bars.forEach((b,i)=>{const max=+b.parentElement.dataset.max||16;const shape=1-Math.abs(i-(bars.length/(document.querySelectorAll('[data-live="wave"]').length||1)-1)/2)/((bars.length||1));
+      const h=Math.max(3,Math.round(max*lv*(.45+.55*Math.random())));b.style.height=h+'px';});
+  }
+  requestAnimationFrame(tick);
+}
+function startCall(){clearTimeout(endTimer);state='call';start=Date.now()-(+document.getElementById('elapsed').value||0)*1000;notch.className=notch.dataset.base+' call';
+  live.textContent=APPS[document.querySelector('input[name=app]:checked').value].name+' call started.';window.onState&&onState('call');}
+function hangUp(){if(state!=='call')return;const total=fmt(Date.now()-start);state='ended';document.querySelectorAll('[data-live="total"]').forEach(e=>e.textContent=total);
+  notch.className=notch.dataset.base+' ended';live.textContent='Call ended, '+total+'.';window.onState&&onState('ended');
+  endTimer=setTimeout(()=>{state='idle';notch.className=notch.dataset.base;window.onState&&onState('idle');},2500);}
+document.querySelectorAll('input[name=app]').forEach(r=>r.addEventListener('change',()=>setApp(r.value)));
+document.querySelectorAll('[data-talk]').forEach(b=>b.addEventListener('click',()=>{speaking=b.dataset.talk;document.querySelectorAll('[data-talk]').forEach(x=>x.setAttribute('aria-pressed',x===b));}));
+document.getElementById('start').addEventListener('click',startCall);
+document.getElementById('hang').addEventListener('click',hangUp);
+setApp('facetime');requestAnimationFrame(tick);
+
+let foldTimer=null, hover=false;
+window.onState=(s)=>{clearTimeout(foldTimer);
+  if(s==='call'){notch.classList.add('card');foldTimer=setTimeout(()=>{if(!hover)notch.classList.remove('card');},3000);}
+  if(s==='ended'){notch.classList.add('card');}
+};
+notch.addEventListener('mouseenter',()=>{hover=true;if(state==='call')notch.classList.add('card');});
+notch.addEventListener('mouseleave',()=>{hover=false;if(state==='call')notch.classList.remove('card');});
+</script>
+</body>
+</html>

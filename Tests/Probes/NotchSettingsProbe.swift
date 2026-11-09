@@ -85,12 +85,12 @@ import Foundation
         // The window keeps the open-drawer size in both states (resizing it redraws late and moves
         // the compact row). Hover counts only over the visible part; clicks elsewhere pass through.
         // The window keeps a transparent margin so the open drawer's shadow is not cut off, and is
-        // as wide as the drawer or the volume/brightness wings (each wing 54 pt wider, at least 96 pt),
-        // whichever is wider.
+        // as wide as the drawer, the volume/brightness wings (each wing 54 pt wider, at least 96 pt), the
+        // device card or the call card, whichever is wider.
         let margin = NotchLayout.shadowMargin
         check(margin >= 24 + 10, "the margin fits the drawer shadow radius and offset")
         check(hugging.hudWidth == 185 + 96 * 2, "the tightest notch gets the minimum HUD wings")
-        let widestHUD = max(hugging.hudWidth, hugging.deviceWingsWidth, hugging.deviceCardWidth)
+        let widestHUD = max(hugging.hudWidth, hugging.deviceWingsWidth, hugging.deviceCardWidth, hugging.callCardWidth)
         check(hugging.windowSize == CGSize(width: widestHUD + margin * 2,
                                            height: hugging.panelSize(expanded: true).height + margin),
               "the window has room for the widest state plus the shadow margin")

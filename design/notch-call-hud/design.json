@@ -1,0 +1,28 @@
+{
+  "title": "Notch call HUD",
+  "brief": "While in a call (FaceTime, Zoom, Meet, WhatsApp...), show the call in the notch like the iPhone: live mic waveform from your voice, a green call timer, and a Call ended state on hang-up. No incoming calls in v1.",
+  "feature": "odd/tasks/call-hud.md",
+  "artboards": [
+    {
+      "file": "01-call-wings.html",
+      "title": "Call wings",
+      "tradeoff": "Glanceable for the whole call like the iPhone Live Activity; widest compact shape for the whole call",
+      "width": 1440,
+      "height": 1300
+    },
+    {
+      "file": "02-voice-lip.html",
+      "title": "Voice lip",
+      "tradeoff": "Calm, notch barely grows, voice as a glowing line; less readable and does not name the app",
+      "width": 1440,
+      "height": 1300
+    },
+    {
+      "file": "03-call-card.html",
+      "title": "Call card",
+      "tradeoff": "Big card at start, end and on hover, wings between; most motion, covers windows briefly",
+      "width": 1440,
+      "height": 1450
+    }
+  ]
+}

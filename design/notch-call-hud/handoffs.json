@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "03-call-card.html",
+  "handoffs": {
+    "03-call-card.html": {
+      "status": "implemented",
+      "queued": true,
+      "sentAt": "2026-11-09T16:38:33.008Z",
+      "startedAt": "2026-11-09T16:39:53.622Z",
+      "implementedAt": "2026-11-09T17:43:48.656Z",
+      "feature": "odd/tasks/call-hud.md",
+      "note": "Swift: call card + wings, official app icons, browser service from window title (Meet/Teams/Zoom/…), ended card. 10 probes pass, independent verify PASS. Live call test pending on the user's dev build."
+    }
+  }
+}

@@ -3,12 +3,12 @@
   "chosen": "03-drop-card.html",
   "handoffs": {
     "03-drop-card.html": {
-      "status": "in_progress",
+      "status": "implemented",
       "queued": false,
       "sentAt": "2026-11-09T02:36:47.620Z",
       "startedAt": "2026-11-09T02:41:02.514Z",
-      "implementedAt": null,
-      "note": "Mapping HUD code and device/battery sources; feature doc odd/tasks/device-hud.md."
+      "implementedAt": "2026-11-09T16:34:25.669Z",
+      "note": "Shipped in v0.6.0; user confirmed it works with real devices."
     }
   }
 }
