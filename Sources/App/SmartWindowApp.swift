@@ -33,6 +33,8 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
     let systemMonitor = SystemMonitorService()
     let nowPlaying = NowPlayingService()
     let notchController = NotchController()
+    let systemHUD = SystemHUDService()
+    let focusStatus = FocusStatusService()
     private var cancellables = Set<AnyCancellable>()
     private var settingsWindowController: NSWindowController?
 
@@ -50,12 +52,17 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
             windowManager.requestPermissionAndStart()
         }
 
+        // Settings lists displays that are not connected by their last known name.
+        DisplayIdentity.rememberConnectedDisplays()
+
         // Show the tab bar immediately
         overlayController.systemMonitor = systemMonitor
         overlayController.nowPlaying = nowPlaying
         overlayController.show()
         
         notchController.show()
+        systemHUD.start()
+        focusStatus.start()
 
         windowManager.$fullscreenScreenFrame
             .removeDuplicates()
@@ -91,6 +98,7 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                DisplayIdentity.rememberConnectedDisplays()
                 self?.overlayController.repositionIfNeeded()
             }
         }

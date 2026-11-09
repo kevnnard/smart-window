@@ -1,0 +1,9 @@
+{
+  "title": "Notch system HUD",
+  "brief": "Animated notch feedback for native system controls (volume, mute, display brightness, keyboard backlight) on a MacBook with a physical notch, replacing the stock macOS HUD while keeping the camera area empty and the compact music row stationary",
+  "artboards": [
+    { "file": "01-wings.html", "title": "Wings", "tradeoff": "Never covers the window below; small level bar with no label or device name", "width": 1200, "height": 640 },
+    { "file": "02-drop-hud.html", "title": "Drop-down HUD", "tradeoff": "Closest to the native HUD, with device name and 16 segments; briefly covers the top of the window", "width": 1200, "height": 640 },
+    { "file": "03-glow-lip.html", "title": "Glow lip", "tradeoff": "Zero layout shift while music plays; level is less precise and colored light feels less native", "width": 1200, "height": 640 }
+  ]
+}

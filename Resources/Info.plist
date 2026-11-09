@@ -38,6 +38,10 @@
     <key>NSAppleEventsUsageDescription</key>
     <string>SmartWindow asks Spotify and Music what is playing to show the current track in the notch.</string>
 
+    <!-- Focus status (notch Focus HUD without Full Disk Access) -->
+    <key>NSFocusStatusUsageDescription</key>
+    <string>SmartWindow shows in the notch when a Focus turns on or off.</string>
+
     <!-- Supports Retina -->
     <key>NSHighResolutionCapable</key>
     <true/>

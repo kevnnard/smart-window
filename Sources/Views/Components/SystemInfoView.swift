@@ -78,17 +78,21 @@ struct SystemInfoView: View {
         }
     }
 
-    private var visibleWidgets: [String] {
-        focusMode.visibleWidgets(in: settings.widgetOrder) {
-            displayPreferences.widgetVisible($0, on: displayKey, global: settings.widgetVisibility[$0] ?? true)
-        }
+    /// Order, visibility and separators for this display: Default plus its own settings.
+    private var barSettings: DisplayPreferences.Settings {
+        displayPreferences.effectiveSettings(for: displayKey, app: settings)
+    }
+
+    private func visibleWidgets(_ bar: DisplayPreferences.Settings) -> [String] {
+        focusMode.visibleWidgets(in: bar.widgetOrder, isVisible: bar.isWidgetVisible)
     }
 
     var body: some View {
+        let bar = barSettings
         HStack(spacing: 8) { // Consistent spacing
-            ForEach(visibleWidgets, id: \.self) { widgetId in
+            ForEach(visibleWidgets(bar), id: \.self) { widgetId in
                 badge(for: widgetId)
-                if settings.separatorPositions.contains(widgetId) || widgetId == "Battery" {
+                if bar.hasSeparator(after: widgetId) || widgetId == "Battery" {
                     Separator()
                 }
             }

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus HUD: Announce wings</title>
+<style>
+:root{--bg:#090a0f;--text:#f5f5f7;--muted:rgba(245,245,247,.62);--border:rgba(255,255,255,.12);--surface:#15171f;--focus:#5ea1ff;--tint:#5e5ce6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
+header{padding:28px 40px 0}
+h1{font-size:20px;margin:0;font-weight:650}
+.tradeoff{color:var(--muted);margin:6px 0 0;max-width:820px}
+.stage{margin:22px 40px 0;height:330px;border-radius:16px;overflow:hidden;position:relative;border:1px solid var(--border);
+  background:radial-gradient(120% 90% at 20% 110%,#c2606b 0,transparent 55%),radial-gradient(90% 80% at 85% 100%,#e0a458 0,transparent 50%),linear-gradient(160deg,#16243f,#3b2a5c 55%,#5b2f55)}
+.screen{position:absolute;top:0;left:50%;width:700px;transform:translateX(-50%) scale(1.6);transform-origin:top center}
+.menubar{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:12px;color:rgba(255,255,255,.92);background:rgba(15,15,25,.32)}
+.menubar .apps{display:flex;gap:14px}.menubar .apps b{font-weight:650}
+.menubar .status{display:flex;gap:10px;font-variant-numeric:tabular-nums}
+.camera{position:absolute;top:0;left:50%;width:185px;height:32px;transform:translateX(-50%);background:#000;border-radius:0 0 10px 10px;z-index:3}
+.camera::after{content:"";position:absolute;left:50%;top:11px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#2b3350,#05060a 70%)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);height:32px;width:280px;background:#000;border-radius:0 0 12px 12px;z-index:2;
+  transition:width .46s cubic-bezier(.3,1.35,.45,1),box-shadow .5s ease}
+.notch.no-music{width:185px}
+.notch.active{width:388px}
+.wing{position:absolute;top:0;height:32px;display:flex;align-items:center;width:calc(50% - 92.5px)}
+.wing.left{left:0}.wing.right{right:0}
+.layer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .16s ease,transform .3s cubic-bezier(.3,1.35,.45,1)}
+.notch.active .idle,.notch.no-music .idle{opacity:0;transform:scale(.85)}
+.hud{opacity:0;transform:scale(.7)}
+.notch.active .hud{opacity:1;transform:none;transition-delay:.08s}
+.art{width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#1db954,#0b6b30 60%,#043d1b)}
+.eq{display:flex;gap:2px;align-items:flex-end;height:12px}
+.eq i{width:2.5px;background:#1db954;border-radius:1px;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}.eq i:nth-child(4){animation-delay:-.15s}
+@keyframes eq{0%,100%{height:3px}50%{height:12px}}
+/* Focus glyph: tinted disc that pops in, with one ring pulse when a Focus turns on */
+.glyph{position:relative;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;color:#fff;background:var(--tint);transition:background .3s ease}
+.glyph svg{width:12px;height:12px;display:block}
+.glyph.off{background:#3a3a40;color:rgba(255,255,255,.75)}
+.glyph::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px solid var(--tint);opacity:0}
+.notch.active.on .glyph{animation:pop .5s cubic-bezier(.3,1.6,.45,1) .08s both}
+.notch.active.on .glyph::after{animation:ring .9s ease-out .2s}
+@keyframes pop{0%{transform:scale(.4) rotate(-25deg)}100%{transform:none}}
+@keyframes ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.9)}}
+.label{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
+.label .name{font-size:11px;font-weight:650;color:var(--tint);white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis}
+.label .state{font-size:9px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:.02em}
+.notch.off .label .name{color:rgba(255,255,255,.75)}
+.panel{margin:20px 40px 0;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
+button{background:#22252f;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+button:hover{background:#2b2f3b}
+button[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+button .dot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+label.toggle{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.notes{color:var(--muted);font-size:13px;margin:0;padding-left:18px}
+.notes li{margin-bottom:4px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>01 · Announce wings</h1>
+  <p class="tradeoff">A Focus change opens the same wings as the volume HUD: the Focus icon pops in its color left of the camera, and its name with On or Off sits right of it, then the notch returns to the music row. Tradeoff: once announced, nothing shows that a Focus is still on.</p>
+</header>
+<main>
+  <section class="stage" aria-label="MacBook screen preview">
+    <div class="screen">
+      <div class="menubar" aria-hidden="true">
+        <div class="apps"><b>Finder</b><span>File</span><span>Edit</span><span>View</span></div>
+        <div class="status"><span>CPU 12%</span><span>82%</span><span>Sat 9:41 AM</span></div>
+      </div>
+      <div class="notch" id="notch">
+        <div class="wing left">
+          <div class="layer idle" aria-hidden="true"><div class="art"></div></div>
+          <div class="layer hud"><div class="glyph" id="glyph"></div></div>
+        </div>
+        <div class="wing right">
+          <div class="layer idle" aria-hidden="true"><div class="eq"><i></i><i></i><i></i><i></i></div></div>
+          <div class="layer hud"><div class="label"><span class="name" id="name"></span><span class="state" id="state"></span></div></div>
+        </div>
+      </div>
+      <div class="camera" aria-hidden="true"></div>
+    </div>
+  </section>
+  <section class="panel" aria-label="Try it">
+    <div class="controls" id="modes" role="group" aria-label="Focus"></div>
+    <ul class="notes">
+      <li>Pick a Focus to turn it on; pick it again to turn it off. Keys <b>1</b>–<b>5</b> do the same, <b>0</b> turns Focus off.</li>
+      <li>Turning on: the icon pops in with one ring pulse in the Focus color. Turning off: gray icon, no pulse.</li>
+      <li>Hides 1.6 s after the change, like the volume HUD. The camera area stays empty.</li>
+      <li><label class="toggle"><input type="checkbox" id="music" checked> Music playing</label></li>
+    </ul>
+  </section>
+  <p class="sr" aria-live="polite" id="live"></p>
+</main>
+<script>
+const P='fill="currentColor"';
+const modes=[
+  {id:'dnd',name:'Do Not Disturb',color:'#5e5ce6',svg:`<path ${P} d="M14.5 2.5a9.5 9.5 0 1 0 7 15.6A8 8 0 0 1 14.5 2.5z"/>`},
+  {id:'work',name:'Work',color:'#30b0c7',svg:`<path ${P} d="M9 3h6a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3V5a2 2 0 0 1 2-2zm0 3h6V5H9z"/>`},
+  {id:'sleep',name:'Sleep',color:'#64d2ff',svg:`<path ${P} d="M2 10h20v9h-2v-2H4v2H2zm3-5h5a2 2 0 0 1 2 2v2H3V7a2 2 0 0 1 2-2zm9 2h5a3 3 0 0 1 3 3H12V9a2 2 0 0 1 2-2z"/>`},
+  {id:'personal',name:'Personal',color:'#bf5af2',svg:`<circle ${P} cx="12" cy="7" r="4.5"/><path ${P} d="M3 21a9 9 0 0 1 18 0z"/>`},
+  {id:'reading',name:'Reading',color:'#ff9f0a',svg:`<path ${P} d="M2 4h7a3 3 0 0 1 3 3v14a2 2 0 0 0-2-2H2zm20 0h-7a3 3 0 0 0-3 3v14a2 2 0 0 1 2-2h8z"/>`}
+];
+const notch=document.getElementById('notch'),live=document.getElementById('live'),wrap=document.getElementById('modes');
+let active=null,timer;
+modes.forEach((m,i)=>{
+  const b=document.createElement('button');
+  b.style.setProperty('--c',m.color);b.dataset.id=m.id;b.setAttribute('aria-pressed','false');
+  b.innerHTML=`<span class="dot" aria-hidden="true"></span>${m.name}`;
+  b.addEventListener('click',()=>toggle(m));wrap.appendChild(b);
+});
+function show(m,on){
+  notch.style.setProperty('--tint',m.color);
+  const g=document.getElementById('glyph');
+  g.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${m.svg}</svg>`;
+  g.classList.toggle('off',!on);
+  document.getElementById('name').textContent=m.name;
+  document.getElementById('state').textContent=on?'On':'Off';
+  notch.classList.remove('active','on','off');void notch.offsetWidth;
+  notch.classList.add('active',on?'on':'off');
+  live.textContent=`${m.name} ${on?'on':'off'}`;
+  clearTimeout(timer);timer=setTimeout(()=>notch.classList.remove('active'),1600);
+}
+function toggle(m){
+  if(active&&active.id===m.id){active=null;show(m,false)}
+  else{active=m;show(m,true)}
+  wrap.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(active&&b.dataset.id===active.id)));
+}
+document.getElementById('music').addEventListener('change',e=>notch.classList.toggle('no-music',!e.target.checked));
+addEventListener('keydown',e=>{
+  if(e.target.matches('input'))return;
+  if(e.key==='0'&&active){toggle(active);return}
+  const m=modes[+e.key-1];if(m)toggle(m);
+});
+</script>
+</body>
+</html>

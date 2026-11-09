@@ -1,0 +1,8 @@
+{
+  "title": "Notch Focus HUD",
+  "brief": "Show macOS Focus changes in the notch of a MacBook: which Focus turned on or off, with its icon and color, animated in the same wings as the volume and brightness HUD, keeping the camera area empty",
+  "artboards": [
+    { "file": "01-focus-wings.html", "title": "Announce wings", "tradeoff": "Matches the volume HUD exactly; after 1.6 s nothing shows that a Focus is still on", "width": 1200, "height": 640 },
+    { "file": "02-persistent-badge.html", "title": "Persistent badge", "tradeoff": "Shows the active Focus at a glance all the time; adds one more element to the compact row and keeps the notch visible during a Focus", "width": 1200, "height": 640 }
+  ]
+}

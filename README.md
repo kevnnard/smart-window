@@ -9,7 +9,7 @@
 A native SwiftUI menu bar overlay inspired by Polybar and Waybar.<br/>
 Switch windows by number, keep your music in sight, and make the bar yours.
 
-[![Release](https://img.shields.io/badge/release-v0.4.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.4.0)
+[![Release](https://img.shields.io/badge/release-v0.5.0-2f855a?style=for-the-badge)](https://github.com/kevnnard/smart-window/releases/tag/v0.5.0)
 [![macOS](https://img.shields.io/badge/macOS-13%2B-black?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 [![Homebrew](https://img.shields.io/badge/Homebrew-cask-f6ad55?style=for-the-badge&logo=homebrew&logoColor=black)](#quick-start)
 [![License](https://img.shields.io/badge/license-non--commercial-blue?style=for-the-badge)](LICENSE)
@@ -26,8 +26,8 @@ Switch windows by number, keep your music in sight, and make the bar yours.
   <img width="1509" height="27" alt="Close-up of the SmartWindow top bar" src="https://github.com/user-attachments/assets/ade346d4-f75e-48b4-86f6-84a9a99b7e0c" />
 </p>
 
-> **v0.4.0:** the release includes the features below in a signed, notarized
-> **Apple Silicon (arm64)** bundle. See the [release notes](Resources/ReleaseNotes-0.4.0.md)
+> **v0.5.0:** the release includes the features below in a signed, notarized
+> **Apple Silicon (arm64)** bundle. See the [release notes](Resources/ReleaseNotes-0.5.0.md)
 > for changes and known validation limits. Intel users must build from source.
 > The screenshots above are existing project images, not a preview of every setting.
 
@@ -126,6 +126,18 @@ track, controls and every app currently playing.
   otherwise the controls are disabled with the reason. macOS offers no per-app command,
   so if the current app changes in the instant before a click, that click can reach it.
 - **Click to return:** click the artwork to bring the player forward.
+- **Volume and brightness:** changing the volume, muting, or changing the built-in
+  display's brightness widens the notch for a moment on every display that shows it, with
+  an icon on the left and the level on the right (around the camera on a MacBook). It
+  appears even when nothing is playing, and never covers the window below. It is not shown while the drawer is open. The macOS volume and brightness
+  HUD still appears.
+- **Focus:** turning a Focus on or off opens the same wings, with the Focus icon in its
+  color and its name with On or Off. Telling which Focus is on needs Full Disk Access for
+  SmartWindow (System Settings → Privacy & Security), since macOS keeps it in a protected
+  folder. Settings → Permissions shows whether it is granted and opens that pane. Without it, SmartWindow asks for Focus status permission and shows a generic
+  Focus. A Focus turned on by a schedule may show only as the generic Focus, and only when
+  Focus status permission is granted. Outputs without a
+  software volume, such as most external displays, have no volume to show.
 
 On a MacBook the notch is pure black, has no pixels over the camera, and its width
 includes the camera notch. Automation permission is required to control Spotify and
@@ -154,20 +166,19 @@ with a made-up reading.
 
 ## Settings
 
-A resizable window with a System Settings-style sidebar keeps controls grouped by purpose.
+A resizable window with a System Settings-style sidebar has two groups: **Displays**
+holds everything that can differ per monitor; **App** holds what applies to all of them.
 
 | Pane | Controls |
 |:---|:---|
-| **General** | Shortcut reference, app version, and Accessibility permission status |
-| **Appearance** | Bar opacity from 60–100% and a live preview |
-| **Widgets** | Global visibility, drag-to-reorder, separators, and temperature unit |
-| **Notch** | Visibility (all displays, main display only, or per display), black or bar-colored style, default and per-display size, and expanded width |
-| **Displays** | Per-monitor widget visibility: Default, Show, or Hide |
+| **Bar & Notch** | Display map, live preview, and three tabs: **Bar** (opacity 60–100%), **Widgets** (order, visibility and separators), **Notch** (show, show when nothing is playing, black or bar-colored background, width, height, expanded width) |
+| **General** | Launch at login, Focus mode, temperature unit, shortcut reference and app version |
 | **Clock** | Displayed timezone and searchable extra timezones |
-| **Tailscale** | Installation / connection status, tailnet details, and the widget toggle |
+| **Tailscale** | Installation / connection status and tailnet details |
+| **Permissions** | Required (Accessibility) and optional permissions (Automation for Spotify and Music, Full Disk Access, Focus Status), their state, and a button to grant each |
 
 The bar defaults to a neutral dark surface at **94% opacity**; the notch defaults
-to **black**. Appearance and widget preferences persist between launches.
+to **black**. All preferences persist between launches.
 
 **Launch at login** registers the installed app with macOS Login Items using
 `SMAppService`. macOS may require approval in System Settings; the General pane
@@ -175,20 +186,24 @@ shows that state and offers a link. Registration errors do not turn into a fake
 successful toggle. This control is unavailable in an unbundled debug executable.
 An old saved startup preference does not automatically register the app.
 
-In **Displays**, choose a connected monitor and override each widget.
-**Default** follows global settings; **Show** and **Hide** take precedence on that
-monitor. Overrides use the display's CoreGraphics UUID and are retained across
-reconnection. Widget order, clock settings and separators remain global.
-"Use Default Widgets for This Display" resets only that monitor's overrides.
+### Per-display settings
 
-Every notch setting lives in **Notch**, including which monitors show it and a
-custom size per monitor. A monitor set to Show or Hide there ignores the Default
-setting. On a MacBook screen, status widgets that do not fit beside the notch scroll
+**Bar & Notch** starts with a map of your monitors. Pick **Default** to edit the
+values every monitor uses, or pick a monitor to customize it: any bar, widget or
+notch setting changed there applies only to that monitor and is marked
+**Custom**, with a button to return it to Default. **Reset all settings for…**
+clears that monitor's customizations. With a single monitor the map is hidden and
+you edit Default directly.
+
+Customizations use the display's CoreGraphics UUID and are kept while a monitor
+is disconnected: the map shows it dashed as **Not connected** so you can still edit
+it. The former "Main display only" option became per-monitor **Show notch**; an
+existing choice is converted once. On a MacBook screen, status widgets that do not fit beside the notch scroll
 horizontally; the clock stays visible at the right edge.
 
 ## Keyboard input
 
-Enable **Keyboard input** in Settings → Widgets to show the active macOS keyboard
+Enable **Keyboard input** in Settings → Bar & Notch → Widgets to show the active macOS keyboard
 input source. Click the widget to open a native menu with the same enabled keyboard
 sources and localized names used by the system Input menu; the active one is checked.
 For example, **U.S.** appears as `US` in the bar and **Latin American** as `LAT`.
@@ -202,8 +217,8 @@ other widgets.
 
 ## Tailscale
 
-Already using [Tailscale](https://tailscale.com/)? Enable **Show Tailscale widget**
-in Settings → Tailscale. It is optional and starts hidden. If Tailscale is not
+Already using [Tailscale](https://tailscale.com/)? Turn on **Tailscale VPN** in
+Settings → Bar & Notch → Widgets. It is optional and starts hidden. If Tailscale is not
 installed, the pane links to the official macOS download and the widget stays hidden.
 
 | Display | Meaning |
@@ -242,6 +257,7 @@ Shortcuts are global, so you can use them while another app is focused.
 - **macOS 13 or newer.** Development is primarily on Apple Silicon and macOS beta builds; Intel compatibility is not comprehensively verified.
 - **Accessibility permission** for listing and focusing windows.
 - **Automation permission** for Spotify / Apple Music integration.
+- **Full Disk Access** (optional) to show which Focus turned on or off.
 - **Swift 5.9+ toolchain** when building from source.
 - **Tailscale is optional**, required only for its widget.
 

@@ -72,36 +72,61 @@ struct NotchLayout: Equatable {
     static let shadowMargin: CGFloat = 36
 
     /// The notch window keeps this size in both states: resizing a window redraws its content
-    /// late, which moved the compact row. The part not drawn is transparent and lets clicks through.
+    /// late, which moved the compact row. The part not drawn is transparent; the window ignores the
+    /// mouse there (NotchHostingView.updatePointer), so clicks reach the window below.
     var windowSize: CGSize {
         let drawer = panelSize(expanded: true)
-        return CGSize(width: drawer.width + Self.shadowMargin * 2, height: drawer.height + Self.shadowMargin)
+        let width = max(drawer.width, hudWidth)
+        return CGSize(width: width + Self.shadowMargin * 2, height: drawer.height + Self.shadowMargin)
     }
 
-    /// The drawn part of the window, from its top-left corner: the compact pill, or the whole open
-    /// drawer. Hover counts only here.
-    func visibleRect(expanded: Bool) -> CGRect {
-        let width = expanded ? expandedWidth : contentWidth
+    /// How much each wing grows while it shows a volume or brightness change (Wings HUD).
+    static let hudWingExtra: CGFloat = 54
+    /// Narrowest HUD wing, for notches set close to the camera width: still fits a readable bar.
+    static let hudMinWingWidth: CGFloat = 96
+    /// Clearance from the outer edge, so content stays off the rounded bottom corner.
+    static let hudEdgeInset: CGFloat = 12
+    /// Clearance from the camera housing.
+    static let hudCameraInset: CGFloat = 8
+    static let hudLevelSpacing: CGFloat = 6
+    /// Room for "100".
+    static let hudValueWidth: CGFloat = 24
+    /// Wing width while the HUD is shown: room for the level bar and its value. Without a camera
+    /// notch each half of the pill is a wing.
+    var hudWingWidth: CGFloat {
+        max((hasNotch ? wingWidth : contentWidth / 2) + Self.hudWingExtra, Self.hudMinWingWidth)
+    }
+    /// The level bar takes what the wing has left after the insets and the value.
+    var hudLevelBarWidth: CGFloat {
+        max(0, hudWingWidth - Self.hudEdgeInset - Self.hudCameraInset - Self.hudLevelSpacing - Self.hudValueWidth)
+    }
+    /// The compact row while the HUD is shown. It only grows sideways, so it never covers the
+    /// window below. Without a camera notch there is no gap between the wings.
+    var hudWidth: CGFloat { notchWidth + hudWingWidth * 2 }
+
+    /// The drawn part of the window, from its top-left corner: the compact pill (wider while the
+    /// HUD shows), or the whole open drawer. Hover counts only here.
+    func visibleRect(expanded: Bool, hud: Bool = false) -> CGRect {
+        let width = expanded ? expandedWidth : (hud ? hudWidth : contentWidth)
         let height = expanded ? barHeight + Self.expandedCardHeight : barHeight
         return CGRect(x: (windowSize.width - width) / 2, y: 0, width: width, height: height)
     }
 
     /// Size of the drawn compact pill or open drawer (plus the bottom shadow padding).
-    func panelSize(expanded: Bool) -> CGSize {
-        guard expanded else { return panelSize }
+    func panelSize(expanded: Bool, hud: Bool = false) -> CGSize {
+        guard expanded else {
+            return hud ? CGSize(width: hudWidth, height: panelSize.height) : panelSize
+        }
         return CGSize(width: expandedWidth,
                       height: expandedTopInset + Self.expandedCardHeight + Self.bottomPadding)
     }
 
     static func forScreen(_ screen: NSScreen, customWidth: CGFloat? = nil, customHeight: CGFloat? = nil) -> NotchLayout {
-        // A display with a custom size (Notch tab, Per display) overrides the default size.
-        let size = DisplayPreferences.shared.effectiveNotchSize(
-            on: DisplayIdentity.key(for: screen),
-            globalWidth: AppSettings.shared.notchCustomWidth,
-            globalHeight: AppSettings.shared.notchCustomHeight)
-        let width = customWidth ?? CGFloat(size.width)
-        let height = customHeight ?? CGFloat(size.height)
-        let extra = CGFloat(AppSettings.shared.notchExpandedExtraWidth)
+        // Size and Expanded width of this display: its own values, else Default.
+        let display = DisplayPreferences.shared.effectiveSettings(for: DisplayIdentity.key(for: screen))
+        let width = customWidth ?? CGFloat(display.notchSize.width)
+        let height = customHeight ?? CGFloat(display.notchSize.height)
+        let extra = CGFloat(display.expandedExtraWidth)
         let inset = screen.safeAreaInsets.top
         guard inset > 0,
               let left = screen.auxiliaryTopLeftArea,
@@ -223,11 +248,19 @@ struct NotchView: View {
     var displayKey: String? = nil
     @ObservedObject var panelState: NotchPanelState
     @ObservedObject private var displayPreferences = DisplayPreferences.shared
+    @ObservedObject private var systemHUD = SystemHUDState.shared
     static let sourcePillWidth: CGFloat = 60
     static let sourcePillHeight: CGFloat = 20
     static let maxVisibleSources = 3
 
     private var isExpanded: Bool { panelState.isExpanded }
+
+    /// Volume, brightness or Focus change to show in the wings, on every screen, but not while the
+    /// drawer is open, since it has its own controls.
+    private func hudEvent(for layout: NotchLayout) -> SystemHUDEvent? {
+        guard !isExpanded else { return nil }
+        return systemHUD.event
+    }
 
     /// First `max` sources, with the main source moved to the front when it would be hidden.
     nonisolated static func visibleSources(_ all: [AudioSourceInfo], max: Int) -> [AudioSourceInfo] {
@@ -265,18 +298,26 @@ struct NotchView: View {
         return NotchLayout(
             notchWidth: layout.notchWidth,
             physicalBarHeight: layout.physicalBarHeight,
-            customWidth: CGFloat(settings.notchCustomWidth),
-            customHeight: CGFloat(settings.notchCustomHeight)
+            customWidth: CGFloat(notchSettings.notchSize.width),
+            customHeight: CGFloat(notchSettings.notchSize.height),
+            expandedExtraWidth: CGFloat(notchSettings.expandedExtraWidth)
         )
     }
 
+    /// Show, show when idle, background and size for this display: Default plus its own settings.
+    private var notchSettings: DisplayPreferences.Settings {
+        displayPreferences.effectiveSettings(for: displayKey, app: settings)
+    }
+
     private var isVisible: Bool {
-        let isMainOnly = !settings.notchShowOnAllDisplays
-        if isMainOnly, let screen = screen, !screen.isPrimary {
-            return false
+        let notch = notchSettings
+        let displayAllowed = notch.showNotch
+        // A volume or brightness change shows the notch even when nothing is playing. This ignores
+        // the drawer state on purpose: opening the drawer over the HUD must not hide the notch.
+        if systemHUD.event != nil {
+            return displayAllowed
         }
-        let displayAllowed = displayPreferences.nowPlayingVisible(on: displayKey)
-        if settings.notchAlwaysVisible {
+        if notch.showWhenIdle {
             return displayAllowed
         } else {
             return nowPlaying.hasPlayer && displayAllowed
@@ -311,7 +352,9 @@ struct NotchView: View {
     var body: some View {
         let activeLayout = currentLayout
         let cardWidth = activeLayout.panelSize(expanded: true).width
-        let activeSize = activeLayout.panelSize(expanded: isExpanded)
+        let hud = hudEvent(for: activeLayout)
+        let activeSize = activeLayout.panelSize(expanded: isExpanded, hud: hud != nil)
+        let matchesBar = notchSettings.notchMatchesBar
 
         ZStack(alignment: .top) {
             if isVisible {
@@ -320,11 +363,12 @@ struct NotchView: View {
                 // The compact row keeps its own width and position when the drawer opens; only the
                 // drawer around it widens when the details need more room.
                 let row = activeLayout
-                let width = isExpanded ? cardWidth : activeLayout.contentWidth
+                let rowWidth = hud != nil ? row.hudWidth : row.contentWidth
+                let width = isExpanded ? cardWidth : rowWidth
                 let shape = BottomRoundedRectangle(radius: isExpanded ? 22 : (activeLayout.hasNotch ? 12 : 14))
                 VStack(spacing: 0) {
-                    compactContent(for: row)
-                        .frame(width: row.contentWidth, height: row.barHeight)
+                    compactContent(for: row, hud: hud)
+                        .frame(width: rowWidth, height: row.barHeight)
                         .frame(width: width)
                         .contentShape(Rectangle())
                         // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
@@ -342,8 +386,8 @@ struct NotchView: View {
                 // Black matches the physical notch: no outline, and no shadow while compact, so it
                 // blends with the camera housing. The bar color needs both to stand off the
                 // wallpaper; the open drawer floats over windows, so it always has a shadow.
-                .overlay(shape.stroke(Color.white.opacity(settings.notchBadgeMatchesBar ? 0.12 : 0), lineWidth: 1))
-                .shadow(color: .black.opacity(isExpanded ? 0.8 : (settings.notchBadgeMatchesBar ? 0.35 : 0)),
+                .overlay(shape.stroke(Color.white.opacity(matchesBar ? 0.12 : 0), lineWidth: 1))
+                .shadow(color: .black.opacity(isExpanded ? 0.8 : (matchesBar ? 0.35 : 0)),
                         radius: isExpanded ? 24 : 4, y: isExpanded ? 10 : 2)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -355,6 +399,8 @@ struct NotchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: NotchPanelState.drawerAnimationResponse, dampingFraction: 0.8), value: isExpanded)
         .animation(.easeInOut(duration: 0.2), value: nowPlaying.isPlaying)
+        // The wings spring sideways; the camera gap stays centered, so the row does not move.
+        .animation(.spring(response: 0.42, dampingFraction: 0.72), value: hud != nil)
         .onChange(of: isVisible) { visible in
             if !visible { panelState.collapse() }
         }
@@ -363,8 +409,10 @@ struct NotchView: View {
     // MARK: - Compact Content
 
     @ViewBuilder
-    private func compactContent(for activeLayout: NotchLayout) -> some View {
-        if activeLayout.hasNotch {
+    private func compactContent(for activeLayout: NotchLayout, hud: SystemHUDEvent?) -> some View {
+        if let hud {
+            hudContent(hud, layout: activeLayout)
+        } else if activeLayout.hasNotch {
             if nowPlaying.hasPlayer {
                 HStack(spacing: 0) {
                     compactLeftInfo(showsText: activeLayout.showsWingText)
@@ -393,6 +441,96 @@ struct NotchView: View {
                 idleNotchContent
             }
         }
+    }
+
+    /// HUD wings around the camera gap (zero wide without a camera notch). Fades only: a scale
+    /// would shrink the camera gap too. The wings' width springs.
+    private func hudContent(_ hud: SystemHUDEvent, layout: NotchLayout) -> some View {
+        HStack(spacing: 0) {
+            // Next to the camera it centers in its wing; without one it sits at the edge, like the label.
+            hudSymbol(hud)
+                .padding(.leading, NotchLayout.hudEdgeInset)
+                .padding(.trailing, NotchLayout.hudCameraInset)
+                .frame(width: layout.hudWingWidth, alignment: layout.hasNotch ? .center : .leading)
+            Color.clear
+                .frame(width: layout.notchWidth)
+            hudLevel(hud, barWidth: layout.hudLevelBarWidth)
+                .padding(.leading, NotchLayout.hudCameraInset)
+                .padding(.trailing, NotchLayout.hudEdgeInset)
+                .frame(width: layout.hudWingWidth)
+        }
+        .transition(.opacity)
+    }
+
+    /// Left wing: the Focus glyph, or the speaker or sun.
+    @ViewBuilder
+    private func hudSymbol(_ event: SystemHUDEvent) -> some View {
+        if event.kind == .focus {
+            // A new identity per change replays the pop.
+            FocusGlyph(event: event)
+                .id(FocusGlyph.Key(event: event))
+        } else {
+            levelSymbol(event)
+        }
+    }
+
+    /// Right wing: the Focus name with On or Off, or the level bar and value.
+    @ViewBuilder
+    private func hudLevel(_ event: SystemHUDEvent, barWidth: CGFloat) -> some View {
+        if event.kind == .focus {
+            focusLabel(event)
+        } else {
+            levelBar(event, barWidth: barWidth)
+        }
+    }
+
+    private func focusLabel(_ event: SystemHUDEvent) -> some View {
+        let mode = event.focus ?? .generic
+        return VStack(alignment: .trailing, spacing: 1) {
+            Text(mode.name)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(event.isOn ? Color(nsColor: mode.tintColor) : .white.opacity(0.75))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text(event.valueText)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.white.opacity(0.55))
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(mode.name) Focus \(event.isOn ? "on" : "off")")
+    }
+
+    /// Speaker or sun; the speaker waves follow the volume.
+    private func levelSymbol(_ event: SystemHUDEvent) -> some View {
+        Image(systemName: event.symbolName,
+              variableValue: event.kind == .volume && !event.muted ? event.barFraction : nil)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(.white)
+            .accessibilityLabel(event.kind == .volume ? "Volume" : "Brightness")
+    }
+
+    /// Level bar and value.
+    private func levelBar(_ event: SystemHUDEvent, barWidth: CGFloat) -> some View {
+        HStack(spacing: NotchLayout.hudLevelSpacing) {
+            Capsule()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: barWidth, height: 4)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: barWidth * event.barFraction, height: 4)
+                        .animation(.easeOut(duration: 0.18), value: event.barFraction)
+                }
+            Text(event.valueText)
+                .font(.system(size: 10.5, weight: .semibold))
+                .monospacedDigit()
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .frame(width: NotchLayout.hudValueWidth, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityValue(event.muted ? "Muted" : "\(event.valueText) percent")
     }
 
     /// Artwork, plus title and artist when the wing is wide enough.
@@ -637,7 +775,7 @@ struct NotchView: View {
 
     /// Opaque black like the physical notch (the default), or the bar color when chosen in Settings.
     private var notchBackground: Color {
-        settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black
+        notchSettings.notchMatchesBar ? BarTheme.surface : Color.black
     }
 
     // MARK: - Progress
@@ -708,5 +846,55 @@ struct WaveformBars: View {
             }
         }
         .onAppear { animate = true }
+    }
+}
+
+// MARK: - Focus glyph
+
+/// Focus icon on a disc of its color. Turning on pops it in with one ring pulse; turning off shows
+/// it gray, without the pulse.
+private struct FocusGlyph: View {
+    /// Identity of one change, so switching Focus or turning it off replays the animation.
+    struct Key: Hashable {
+        let identifier: String
+        let isOn: Bool
+
+        init(event: SystemHUDEvent) {
+            identifier = (event.focus ?? .generic).identifier
+            isOn = event.isOn
+        }
+    }
+
+    let event: SystemHUDEvent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var popped = false
+    @State private var ringOut = false
+
+    var body: some View {
+        let mode = event.focus ?? .generic
+        let tint = Color(nsColor: mode.tintColor)
+        let animates = event.isOn && !reduceMotion
+        ZStack {
+            Circle()
+                .fill(event.isOn ? tint : Color(white: 0.23))
+            Image(systemName: mode.symbolName)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundColor(event.isOn ? .white : .white.opacity(0.75))
+        }
+        .frame(width: 20, height: 20)
+        .background(
+            Circle()
+                .stroke(tint, lineWidth: 2)
+                .scaleEffect(ringOut ? 1.9 : 1)
+                .opacity(animates && !ringOut ? 0.9 : 0)
+        )
+        .scaleEffect(popped || !animates ? 1 : 0.4)
+        .rotationEffect(.degrees(popped || !animates ? 0 : -25))
+        .accessibilityHidden(true)
+        .onAppear {
+            guard animates else { return }
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.55).delay(0.08)) { popped = true }
+            withAnimation(.easeOut(duration: 0.9).delay(0.2)) { ringOut = true }
+        }
     }
 }

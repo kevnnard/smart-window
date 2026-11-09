@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-focus-wings.html",
+  "handoffs": {
+    "01-focus-wings.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-07T05:10:58.167Z",
+      "startedAt": "2026-11-07T05:11:36.604Z",
+      "implementedAt": "2026-11-07T05:21:07.995Z",
+      "note": "Implemented in SwiftUI (FocusGlyph + focusLabel in the HUD wings). Probes and verify READY; live test pending on the built-in display (no loopback preview: native app)."
+    }
+  }
+}

@@ -2,20 +2,29 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-/// Settings window: a System Settings style sidebar with one pane per area.
+/// Settings window: a System Settings style sidebar. Displays holds every bar and notch setting,
+/// per display; App holds settings that apply to all displays.
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    @State private var selection: SettingsPane = .general
+    @State private var selection: SettingsPane = .barAndNotch
+    @State private var barScope: SettingsScope = .defaults
+    @State private var barTab: SettingsTab = .bar
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPane.allCases, selection: $selection) { pane in
-                Label {
-                    Text(pane.title)
-                } icon: {
-                    PaneIcon(systemImage: pane.icon, tint: pane.tint)
+            List(selection: $selection) {
+                ForEach(SettingsPane.Group.allCases, id: \.self) { group in
+                    Section(group.title) {
+                        ForEach(SettingsPane.allCases.filter { $0.group == group }) { pane in
+                            Label {
+                                Text(pane.title)
+                            } icon: {
+                                PaneIcon(systemImage: pane.icon, tint: pane.tint)
+                            }
+                            .tag(pane)
+                        }
+                    }
                 }
-                .tag(pane)
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 200)
@@ -37,6 +46,7 @@ struct SettingsView: View {
         } detail: {
             pane
                 .navigationTitle(selection.title)
+                .navigationSubtitle(selection.group == .app ? "Applies to all displays" : "")
         }
         .frame(minWidth: 700, minHeight: 520)
         .onAppear { settings.reconcileWidgets() }
@@ -45,13 +55,16 @@ struct SettingsView: View {
     @ViewBuilder
     private var pane: some View {
         switch selection {
+        case .barAndNotch:
+            BarAndNotchPane(scope: $barScope, tab: $barTab) { selection = .general }
         case .general: GeneralPane()
-        case .appearance: AppearancePane()
-        case .notch: NotchPane()
-        case .widgets: WidgetsPane()
-        case .displays: DisplaysPane()
         case .clock: ClockPane()
-        case .tailscale: TailscalePane()
+        case .tailscale:
+            TailscalePane {
+                barTab = .widgets
+                selection = .barAndNotch
+            }
+        case .permissions: PermissionsPane()
         }
     }
 
@@ -66,43 +79,45 @@ struct SettingsView: View {
 // MARK: - Panes
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, notch, widgets, displays, clock, tailscale
+    case barAndNotch, general, clock, tailscale, permissions
+
+    /// Sidebar groups: per-display settings, then settings that apply to all displays.
+    enum Group: CaseIterable {
+        case displays, app
+        var title: String { self == .displays ? "Displays" : "App" }
+    }
 
     var id: String { rawValue }
 
+    var group: Group { self == .barAndNotch ? .displays : .app }
+
     var title: String {
         switch self {
+        case .barAndNotch: return "Bar & Notch"
         case .general: return "General"
-        case .appearance: return "Appearance"
-        case .notch: return "Notch"
-        case .widgets: return "Widgets"
-        case .displays: return "Displays"
         case .clock: return "Clock"
         case .tailscale: return "Tailscale"
+        case .permissions: return "Permissions"
         }
     }
 
     var icon: String {
         switch self {
+        case .barAndNotch: return "menubar.rectangle"
         case .general: return "gearshape.fill"
-        case .appearance: return "paintbrush.fill"
-        case .notch: return "laptopcomputer"
-        case .widgets: return "square.grid.3x1.below.line.grid.1x2.fill"
-        case .displays: return "display.2"
         case .clock: return "clock.fill"
         case .tailscale: return "lock.shield.fill"
+        case .permissions: return "hand.raised.fill"
         }
     }
 
     var tint: Color {
         switch self {
+        case .barAndNotch: return .pink
         case .general: return .gray
-        case .appearance: return .pink
-        case .notch: return .indigo
-        case .widgets: return .blue
-        case .displays: return .purple
         case .clock: return .orange
         case .tailscale: return .teal
+        case .permissions: return .blue
         }
     }
 }
@@ -124,6 +139,7 @@ private struct PaneIcon: View {
 // MARK: - General
 
 private struct GeneralPane: View {
+    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var login = LoginItemService.shared
     @ObservedObject private var focusMode = FocusMode.shared
 
@@ -150,10 +166,15 @@ private struct GeneralPane: View {
 
             Section {
                 Toggle("Focus mode", isOn: $focusMode.isEnabled)
+                Picker("Temperature unit", selection: $settings.temperatureUnit) {
+                    Text("Celsius").tag("C")
+                    Text("Fahrenheit").tag("F")
+                }
+                .pickerStyle(.segmented)
             } header: {
-                Text("Focus")
+                Text("Behavior")
             } footer: {
-                Text("Hide secondary widgets on all displays, keeping windows, clock and music. Use the moon in the bar to toggle without opening Settings.")
+                Text("Focus mode hides secondary widgets on all displays, keeping windows, clock and music. Use the moon in the bar to toggle it without opening Settings.")
             }
 
             Section {
@@ -169,13 +190,10 @@ private struct GeneralPane: View {
 
             Section {
                 LabeledContent("Version", value: SettingsView.versionString)
-                LabeledContent("Accessibility") {
-                    PermissionBadge(granted: AccessibilityService.shared.isAccessibilityEnabled)
-                }
             } header: {
                 Text("About")
             } footer: {
-                Text("Accessibility access is required to list and switch windows.")
+                Text("Permissions the app needs are in Settings → Permissions.")
             }
         }
         .formStyle(.grouped)
@@ -204,207 +222,14 @@ private struct ShortcutRow: View {
     }
 }
 
-private struct PermissionBadge: View {
-    let granted: Bool
-
-    var body: some View {
-        Label(granted ? "Granted" : "Not granted", systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(granted ? Color.green : Color.orange)
-    }
-}
-
-// MARK: - Appearance
-
-private struct AppearancePane: View {
-    @ObservedObject private var settings = AppSettings.shared
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("Bar opacity") {
-                    HStack(spacing: 10) {
-                        Slider(value: $settings.barOpacity, in: 0.6...1.0, step: 0.02)
-                            .frame(width: 180)
-                        Text("\(Int((settings.barOpacity * 100).rounded()))%")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 40, alignment: .trailing)
-                    }
-                }
-            } header: {
-                Text("Bar")
-            } footer: {
-                Text("Lower opacity lets the wallpaper show through the bar.")
-            }
-
-            Section {
-                BarPreview()
-            } header: {
-                Text("Preview")
-            } footer: {
-                Text("Notch size, style and visibility are in the Notch tab.")
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-/// Small live preview of the bar and the notch badge with the current appearance settings.
-private struct BarPreview: View {
-    @ObservedObject private var settings = AppSettings.shared
-
-    private var previewNotchWidth: CGFloat {
-        let ratio = CGFloat(settings.notchCustomWidth / AppSettings.notchDefaultWidth)
-        return min(220, max(100, 150 * ratio))
-    }
-
-    private var previewNotchHeight: CGFloat {
-        let ratio = CGFloat(settings.notchCustomHeight / AppSettings.notchDefaultHeight)
-        return min(30, max(18, 22 * ratio))
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            LinearGradient(colors: [.teal, .indigo], startPoint: .leading, endPoint: .trailing)
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    previewTab("1 · Finder", active: false)
-                    previewTab("2 · Safari", active: true)
-                    Spacer()
-                    previewBadge("CPU 12%", color: BarTheme.badgeCpu)
-                    previewBadge("RAM 48%", color: BarTheme.badgeRam)
-                }
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .background(BarTheme.surface.opacity(settings.barOpacity))
-
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.2)).frame(width: 14, height: 14)
-                    Text("Track · Artist")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(BarTheme.badgeMusic)
-                }
-                .padding(.horizontal, 8)
-                .frame(width: previewNotchWidth, height: previewNotchHeight)
-                .background(settings.notchBadgeMatchesBar ? BarTheme.surface : Color.black)
-                .clipShape(BottomRoundedRectangle(radius: 7))
-            }
-        }
-        .frame(height: 80)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func previewTab(_ text: String, active: Bool) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-            .foregroundStyle(active ? BarTheme.activeText : BarTheme.inactiveText)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(active ? BarTheme.activeTab : BarTheme.tabBackground, in: RoundedRectangle(cornerRadius: 4))
-    }
-
-    private func previewBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-            .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
-    }
-}
-
-// MARK: - Widgets
-
-private struct WidgetsPane: View {
-    @ObservedObject private var settings = AppSettings.shared
-
-    var body: some View {
-        Form {
-            Section {
-                List {
-                    ForEach(settings.widgetOrder, id: \.self) { id in
-                        WidgetRow(id: id, isLast: id == settings.widgetOrder.last)
-                    }
-                    .onMove { from, to in
-                        settings.widgetOrder.move(fromOffsets: from, toOffset: to)
-                    }
-                }
-                .frame(height: CGFloat(settings.widgetOrder.count) * 30 + 12)
-                .scrollDisabled(true)
-            } header: {
-                Text("Bar widgets")
-            } footer: {
-                Text("Drag to reorder. The clock always stays at the far right. Keyboard input uses your enabled macOS keyboard sources, not the app language.")
-            }
-
-            Section {
-                Picker("Temperature unit", selection: $settings.temperatureUnit) {
-                    Text("Celsius").tag("C")
-                    Text("Fahrenheit").tag("F")
-                }
-                .pickerStyle(.segmented)
-            } header: {
-                Text("Units")
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-private struct WidgetRow: View {
-    @ObservedObject private var settings = AppSettings.shared
-    let id: String
-    let isLast: Bool
-
-    private var isVisible: Binding<Bool> {
-        Binding(
-            get: { settings.widgetVisibility[id] ?? true },
-            set: { settings.widgetVisibility[id] = $0 }
-        )
-    }
-
-    private var hasSeparator: Binding<Bool> {
-        Binding(
-            get: { settings.separatorPositions.contains(id) },
-            set: { on in
-                if on {
-                    if !settings.separatorPositions.contains(id) { settings.separatorPositions.append(id) }
-                } else {
-                    settings.separatorPositions.removeAll { $0 == id }
-                }
-            }
-        )
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.tertiary)
-            Text(AppSettings.widgetDisplayName(id))
-                .foregroundStyle(isVisible.wrappedValue ? .primary : .secondary)
-            Spacer()
-            Toggle("Separator after", isOn: hasSeparator)
-                .toggleStyle(.checkbox)
-                .controlSize(.small)
-                .disabled(isLast)
-                .help(isLast ? "The last widget always has a separator" : "Draw a divider after this widget")
-            Toggle("Visible", isOn: isVisible)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .labelsHidden()
-        }
-        .padding(.vertical, 2)
-    }
-}
 
 // MARK: - Tailscale
 
+/// Tailscale status only; the widget is shown or hidden in Bar & Notch › Widgets.
 private struct TailscalePane: View {
-    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var service = TailscaleService.shared
+    /// Opens Bar & Notch › Widgets.
+    let showWidgets: () -> Void
 
     private var status: String {
         switch service.state {
@@ -446,18 +271,13 @@ private struct TailscalePane: View {
             } header: {
                 Text("Private network")
             } footer: {
-                Text("Tailscale creates encrypted connections between your devices. A connected tailnet does not mean all internet traffic uses a VPN; that requires a configured exit node. SmartWindow never changes your VPN settings.")
+                Text("Tailscale creates encrypted connections between your devices. A connected tailnet does not mean all internet traffic uses a VPN; that requires a configured exit node. SmartWindow never changes your VPN settings. Observed online measures how long SmartWindow has continuously seen Tailscale online, not the tunnel's age; it resets after disconnection, unavailable status, sleep, or restarting SmartWindow, and changes between five-second checks may be missed.")
             }
 
             Section {
-                Toggle("Show Tailscale widget", isOn: Binding(
-                    get: { settings.widgetVisibility["Tailscale"] ?? false },
-                    set: { settings.widgetVisibility["Tailscale"] = $0 }
-                ))
-            } header: {
-                Text("Menu bar")
-            } footer: {
-                Text("Hidden when Tailscale is not installed. The timer measures how long SmartWindow has continuously observed Tailscale online, not the actual tunnel connection age. It resets after disconnection, unavailable status, sleep, or restarting SmartWindow. Changes between five-second checks may be missed.")
+                LabeledContent("Status only. To show the Tailscale VPN widget in the bar, use Bar & Notch › Widgets.") {
+                    Button("Open Widgets", action: showWidgets)
+                }
             }
         }
         .formStyle(.grouped)

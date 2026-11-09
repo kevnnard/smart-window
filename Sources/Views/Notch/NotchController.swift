@@ -14,13 +14,16 @@ final class NotchController: NSObject, ObservableObject {
     private let nowPlayingService = NowPlayingService()
     private var isVisible = false
     private var cancellables = Set<AnyCancellable>()
+    /// Pointer monitors: global while the pointer is over other apps (the notch window then ignores
+    /// the mouse), local while it is over the notch.
+    private var pointerMonitors: [Any] = []
     
     override init() {
         super.init()
         DisplayPreferences.shared.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                // A per-display notch size may have changed, so resize as well.
+                // A per-display notch size or Expanded width may have changed, so resize as well.
                 self?.repositionAll()
                 self?.refreshVisibility()
             }
@@ -38,6 +41,15 @@ final class NotchController: NSObject, ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshVisibility() }
             .store(in: &cancellables)
+
+        // A volume or brightness change shows the notch even when nothing is playing. Hover keeps
+        // the compact area, so the wider wings do not open the drawer under a resting pointer.
+        SystemHUDState.shared.$event
+            .map { $0 != nil }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshVisibility() }
+            .store(in: &cancellables)
     }
     
     func show() {
@@ -48,29 +60,36 @@ final class NotchController: NSObject, ObservableObject {
             return
         }
         
+        migrateMainDisplayOnly()
         if panels.isEmpty {
             createPanels()
         }
+        startPointerMonitors()
         
         print("[NotchController] Showing \(panels.count) notch panel(s)")
         refreshVisibility()
     }
 
-    private func refreshVisibility() {
-        let isMainOnly = !AppSettings.shared.notchShowOnAllDisplays
+    /// "Main display only" is now Show notch off on each other display; see AppSettings.
+    private func migrateMainDisplayOnly() {
+        let preferences = DisplayPreferences.shared
+        let connected = DisplayIdentity.connectedDisplays().map(\.key)
+        AppSettings.migrateMainDisplayOnly(
+            preferences: preferences,
+            primaryKey: NSScreen.primary.flatMap(DisplayIdentity.key(for:)),
+            knownKeys: connected + Array(preferences.displayInfo.keys) + Array(preferences.overrides.keys))
+    }
 
+    private func refreshVisibility() {
         for screen in NSScreen.screens {
             guard let id = screen.displayID,
                   let panel = panels[id] else { continue }
 
-            if isMainOnly && !screen.isPrimary {
-                panel.orderOut(nil)
-                continue
-            }
-
-            let displayKey = DisplayIdentity.key(for: screen)
-            let displayPrefAllowed = DisplayPreferences.shared.nowPlayingVisible(on: displayKey)
-            let shouldShow = isVisible && displayPrefAllowed && (AppSettings.shared.notchAlwaysVisible || nowPlayingService.hasPlayer)
+            // Show notch and show when nothing is playing of this display: its own values, else Default.
+            let notch = DisplayPreferences.shared.effectiveSettings(for: DisplayIdentity.key(for: screen))
+            let showsHUD = SystemHUDState.shared.event != nil
+            let shouldShow = isVisible && notch.showNotch
+                && (notch.showWhenIdle || nowPlayingService.hasPlayer || showsHUD)
 
             if shouldShow {
                 panel.orderFront(nil)
@@ -78,13 +97,42 @@ final class NotchController: NSObject, ObservableObject {
                 panel.orderOut(nil)
             }
         }
+        // A panel that just hid releases hover and clicks; one that appeared under the pointer takes them.
+        updatePointer()
     }
     
+    /// Switches each notch window between taking clicks (pointer over the drawn notch) and letting
+    /// them through to the window below.
+    private func startPointerMonitors() {
+        guard pointerMonitors.isEmpty else { return }
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+            self?.updatePointer()
+        }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+            self?.updatePointer()
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
+        updatePointer()
+    }
+
+    private func updatePointer() {
+        let location = NSEvent.mouseLocation
+        for panel in panels.values {
+            (panel.contentView as? NotchHostingView<NotchView>)?.updatePointer(at: location)
+        }
+    }
+
     func hide() {
         isVisible = false
         for panel in panels.values {
             panel.orderOut(nil)
         }
+        updatePointer()
     }
     
     /// Creates a panel for each connected screen
@@ -217,6 +265,8 @@ final class NotchController: NSObject, ObservableObject {
                 // Next run loop turn: this sink runs in @Published's willSet.
                 DispatchQueue.main.async {
                     (self?.panels[displayID]?.contentView as? NotchHostingView<NotchView>)?.refreshHoverArea()
+                    // The drawn area changed under a resting pointer.
+                    self?.updatePointer()
                 }
             }
         return panel
@@ -224,7 +274,7 @@ final class NotchController: NSObject, ObservableObject {
 
     /// Positions a panel centered at the top of the given screen. The window always has the
     /// open-drawer size, so opening and closing never resize it (a resize redraws late and moves
-    /// the compact row); the transparent part lets clicks through.
+    /// the compact row); it ignores the mouse outside the drawn part (`updatePointer`).
     private func positionPanel(_ panel: NotchOverlayWindow, on screen: NSScreen) {
         let panelSize = NotchLayout.forScreen(screen).windowSize
         let screenFrame = screen.frame
@@ -238,6 +288,7 @@ final class NotchController: NSObject, ObservableObject {
 
         panel.setFrame(frame, display: true)
         (panel.contentView as? NotchHostingView<NotchView>)?.refreshHoverArea()
+        (panel.contentView as? NotchHostingView<NotchView>)?.updatePointer(at: NSEvent.mouseLocation)
     }
 }
 
@@ -303,12 +354,41 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        panelState.pointerEntered()
+        setPointerInside(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        panelState.pointerExited()
+        setPointerInside(false)
+    }
+
+    private var pointerInside = false
+
+    /// The window always has the open drawer's size, and a transparent window still takes the
+    /// clicks over it. So it ignores the mouse except over the drawn part, and follows the pointer
+    /// (screen coordinates) to switch. While it ignores the mouse, its tracking area gets no
+    /// events, so this also reports hover.
+    func updatePointer(at screenPoint: CGPoint) {
+        guard let window else { return }
+        let visible = hoverRect()
+        let drawn = CGRect(x: window.frame.minX + visible.minX, y: window.frame.maxY - visible.maxY,
+                           width: visible.width, height: visible.height)
+        // A hidden notch (ordered out) draws nothing, so it never takes the pointer.
+        let inside = window.isVisible && drawn.contains(screenPoint)
+        if window.ignoresMouseEvents == inside {
+            window.ignoresMouseEvents = !inside
+        }
+        setPointerInside(inside)
+    }
+
+    private func setPointerInside(_ inside: Bool) {
+        guard inside != pointerInside else { return }
+        pointerInside = inside
+        if inside {
+            panelState.pointerEntered()
+        } else {
+            panelState.pointerExited()
+        }
     }
 }
 
@@ -322,7 +402,8 @@ class NotchOverlayWindow: NSPanel {
         self.isOpaque = false
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        self.ignoresMouseEvents = false
+        // Lets clicks through until the pointer is over the drawn notch (NotchHostingView.updatePointer).
+        self.ignoresMouseEvents = true
         self.acceptsMouseMovedEvents = true
     }
     

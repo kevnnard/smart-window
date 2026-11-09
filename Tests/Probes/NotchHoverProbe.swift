@@ -33,6 +33,34 @@ struct NotchHoverProbe {
         state.collapse()
         check(area() == compact, "collapse restores compact hover bounds")
         check(!area().contains(CGPoint(x: 60, y: 190)), "collapsed drawer does not retain expanded hover")
+
+        // The window always has the open drawer's size; its transparent part must let clicks reach
+        // the window below (a browser tab under the notch area).
+        let window = NotchOverlayWindow(contentRect: CGRect(x: 1000, y: 776, width: 349, height: 224),
+                                        styleMask: [], backing: .buffered, defer: false)
+        window.contentView = host
+        host.frame = CGRect(x: 0, y: 0, width: 349, height: 224)
+        check(window.ignoresMouseEvents, "a new notch window lets clicks through until the pointer is over the notch")
+        // Screen coordinates: origin bottom-left; the window's top edge is at y = 1000.
+        // A hidden notch (nothing playing) neither takes clicks nor opens under the pointer.
+        host.updatePointer(at: CGPoint(x: 1000 + 60, y: 1000 - 10))
+        check(window.ignoresMouseEvents && !state.isExpanded, "a hidden notch ignores the pointer")
+        window.orderFrontRegardless()
+        host.updatePointer(at: CGPoint(x: 1000 + 60, y: 1000 - 10))
+        check(!window.ignoresMouseEvents, "the compact pill takes clicks")
+        check(state.isExpanded, "entering the pill still opens the drawer")
+        host.updatePointer(at: CGPoint(x: 1000 + 60, y: 1000 - 190))
+        check(!window.ignoresMouseEvents, "the open drawer takes clicks")
+        host.updatePointer(at: CGPoint(x: 1000 + 345, y: 1000 - 222))
+        check(window.ignoresMouseEvents, "the transparent margin lets clicks through")
+        state.collapse()
+        host.updatePointer(at: CGPoint(x: 1000 + 60, y: 1000 - 190))
+        check(window.ignoresMouseEvents, "where the closed drawer would be, clicks go through")
+        check(!state.isExpanded, "the invisible drawer area does not open the notch")
+        host.updatePointer(at: CGPoint(x: 1000 + 20, y: 1000 - 10))
+        check(window.ignoresMouseEvents, "beside the closed pill, clicks go through")
+        host.updatePointer(at: CGPoint(x: 500, y: 500))
+        check(window.ignoresMouseEvents, "far away, clicks go through")
         print("PASS: NotchHoverProbe verified")
     }
 }

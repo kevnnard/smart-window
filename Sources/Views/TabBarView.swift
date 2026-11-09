@@ -11,11 +11,14 @@ struct TabBarView: View {
     @EnvironmentObject var windowManager: WindowManager
     @EnvironmentObject var overlayController: OverlayPanelController
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var displayPreferences = DisplayPreferences.shared
     // Note: nowPlaying environment object still injected but now displayed only in Notch
 
     private let leftPadding: CGFloat = 8
     private let rightPadding: CGFloat = 10
     private let regionSpacing: CGFloat = 12
+
+    private var displayKey: String? { screen.flatMap { DisplayIdentity.key(for: $0) } }
 
     private var layout: TopBarScreenLayout {
         TopBarScreenLayout(screen: screen)
@@ -31,7 +34,7 @@ struct TabBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: TabBarConstants.barHeight)
-        .background(BarTheme.surface.opacity(settings.barOpacity))
+        .background(BarTheme.surface.opacity(displayPreferences.effectiveSettings(for: displayKey).barOpacity))
     }
 
     private var notchedBar: some View {
@@ -78,7 +81,7 @@ struct TabBarView: View {
         GeometryReader { proxy in
             AdaptiveStatusRegion(
                 availableWidth: max(proxy.size.width - rightPadding, 0),
-                displayKey: screen.flatMap { DisplayIdentity.key(for: $0) }
+                displayKey: displayKey
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.trailing, rightPadding)
@@ -89,7 +92,7 @@ struct TabBarView: View {
     private var unconstrainedRightRegion: some View {
         AdaptiveStatusRegion(
             availableWidth: .greatestFiniteMagnitude,
-            displayKey: screen.flatMap { DisplayIdentity.key(for: $0) }
+            displayKey: displayKey
         )
         .padding(.trailing, rightPadding)
         .fixedSize(horizontal: true, vertical: false)

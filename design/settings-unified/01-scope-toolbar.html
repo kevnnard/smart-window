@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280">
+<title>01 · Scope toolbar — SmartWindow Settings</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --win: #1e1e1f;
+    --side: #29292b;
+    --group: #2c2c2e;
+    --group-2: #3a3a3c;
+    --sep: rgba(255,255,255,.08);
+    --text: #f2f2f7;
+    --text-2: #a8a8ad;
+    --blue: #0a84ff;
+    --blue-strong: #0a64d6;
+    --blue-text: #5aa9ff;
+    --green: #32d74b;
+    --orange: #ff9f0a;
+    --focus: #8ec5ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0d0d10; }
+  body { font: 13px/1.38 var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+  /* ---------- artboard chrome ---------- */
+  .artboard {
+    position: relative; width: 1280px; height: 820px; margin: 0 auto; overflow: hidden;
+    background:
+      radial-gradient(900px 500px at 15% 10%, #3a2f5c 0%, transparent 60%),
+      radial-gradient(800px 520px at 90% 95%, #173c4f 0%, transparent 60%),
+      linear-gradient(160deg, #1b1a26, #10141b);
+  }
+  .chrome { position: absolute; top: 18px; left: 28px; right: 28px; display: flex; justify-content: space-between; align-items: center; }
+  .chrome-title { font-size: 12px; color: #d6d6dc; }
+  .chrome-title b { font-weight: 600; color: #fff; margin-right: 8px; }
+  .demo { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #d6d6dc; background: rgba(0,0,0,.35); border: 1px dashed rgba(255,255,255,.28); border-radius: 8px; padding: 5px 6px 5px 10px; }
+  .demo-seg { display: inline-flex; background: rgba(255,255,255,.08); border-radius: 6px; padding: 2px; }
+  .demo-seg button { border: 0; background: transparent; border-radius: 4px; padding: 2px 10px; cursor: pointer; }
+  .demo-seg button[aria-checked="true"] { background: #e5e5ea; color: #111; font-weight: 600; }
+
+  /* ---------- window ---------- */
+  .window {
+    position: absolute; left: 150px; top: 70px; width: 980px; height: 680px;
+    display: grid; grid-template-columns: 228px 1fr;
+    background: var(--win); border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.13);
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.8);
+  }
+
+  /* sidebar */
+  .sidebar { background: var(--side); border-right: 1px solid rgba(0,0,0,.45); padding: 16px 10px; overflow-y: auto; }
+  .lights { display: flex; gap: 8px; padding: 0 8px 16px; }
+  .lights span { width: 12px; height: 12px; border-radius: 50%; }
+  .lights span:nth-child(1) { background: #ff5f57; } .lights span:nth-child(2) { background: #febc2e; } .lights span:nth-child(3) { background: #28c840; }
+  .search { position: relative; margin: 0 2px 12px; }
+  .search svg { position: absolute; left: 8px; top: 7px; width: 13px; height: 13px; color: var(--text-2); pointer-events: none; }
+  .search input { width: 100%; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.07); border-radius: 6px; padding: 4px 8px 4px 26px; }
+  .search input::placeholder { color: #9a9aa0; }
+  .side-h { margin: 14px 10px 4px; font-size: 11px; font-weight: 600; color: var(--text-2); }
+  .side-list { list-style: none; margin: 0; padding: 0; }
+  .side-item { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; text-align: left; cursor: pointer; min-height: 30px; }
+  .side-item:hover { background: rgba(255,255,255,.05); }
+  .side-item[aria-current="page"] { background: var(--blue-strong); color: #fff; }
+  .side-item .ic { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; }
+  .side-item .ic svg { width: 14px; height: 14px; }
+  .side-item .name { flex: 1; }
+  .badge { min-width: 18px; padding: 0 5px; height: 17px; border-radius: 9px; font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; background: var(--blue-strong); color: #fff; }
+  .side-item[aria-current="page"] .badge { background: #fff; color: #0a4fb0; }
+  .side-empty { padding: 8px 10px; color: var(--text-2); }
+
+  /* content */
+  .content { display: grid; grid-template-rows: 52px 1fr; min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 0 20px 0 12px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .navbtn { width: 28px; height: 26px; border: 0; background: transparent; border-radius: 6px; display: grid; place-items: center; cursor: pointer; color: var(--text); }
+  .navbtn:hover:not(:disabled) { background: rgba(255,255,255,.07); }
+  .navbtn:disabled { color: #6c6c70; cursor: default; }
+  .navbtn svg { width: 14px; height: 14px; }
+  .toolbar h1 { margin: 0 4px 0 2px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .scope-slot { display: flex; align-items: center; gap: 6px; margin-left: 8px; min-width: 0; }
+  .scope-label { color: var(--text-2); white-space: nowrap; }
+  .popup { position: relative; display: inline-flex; }
+  .popup select {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background: var(--group-2); border: 1px solid rgba(255,255,255,.12); border-radius: 6px;
+    padding: 3px 28px 3px 10px; font-weight: 600; max-width: 260px;
+  }
+  .popup.is-display select { background: #0f3768; border-color: #2f7fe0; }
+  .popup svg { position: absolute; right: 8px; top: 50%; width: 9px; height: 12px; transform: translateY(-50%); pointer-events: none; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 6px; background: rgba(255,255,255,.06); color: var(--text-2); white-space: nowrap; }
+  .chip svg { width: 13px; height: 13px; }
+
+  main { overflow-y: auto; padding: 18px 28px 36px; }
+  main:focus-visible { outline-offset: -3px; }
+
+  /* ---------- scope banner ---------- */
+  .banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; margin-bottom: 6px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
+  .banner.is-display { background: rgba(10,132,255,.1); border-color: rgba(64,156,255,.45); }
+  .banner .b-ic { flex: none; width: 40px; height: 40px; border-radius: 9px; display: grid; place-items: center; background: rgba(255,255,255,.07); }
+  .banner.is-display .b-ic { background: rgba(10,132,255,.22); }
+  .banner .b-ic svg { width: 24px; height: 24px; }
+  .b-body { flex: 1; min-width: 0; }
+  .b-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+  .b-meta { color: var(--text-2); margin-top: 1px; }
+  .b-line { margin: 6px 0 0; color: var(--text); }
+  .b-line.muted { color: var(--text-2); }
+  .b-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+  .b-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: rgba(255,255,255,.1); color: #e5e5ea; }
+  .tag svg { width: 11px; height: 11px; }
+  .tag.warn { background: rgba(255,159,10,.16); color: #ffc46b; }
+  .b-actions { flex: none; display: flex; gap: 6px; align-items: center; }
+  .link { border: 0; background: transparent; color: var(--blue-text); padding: 0 2px; cursor: pointer; font-weight: 500; }
+  .link:hover { text-decoration: underline; }
+  .btn { border: 1px solid rgba(255,255,255,.12); background: var(--group-2); border-radius: 6px; padding: 3px 11px; cursor: pointer; white-space: nowrap; }
+  .btn:hover:not(:disabled) { background: #48484a; }
+  .btn:disabled { color: #7c7c80; cursor: default; }
+  .btn.primary { background: var(--blue-strong); border-color: transparent; color: #fff; }
+  .btn.danger { background: #a3241d; border-color: transparent; color: #fff; }
+
+  /* ---------- grouped form ---------- */
+  .appwide { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); margin: 2px 2px 4px; }
+  .appwide svg { width: 13px; height: 13px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 22px 4px 8px; }
+  .sub { color: var(--text-2); margin: -4px 4px 8px; }
+  .group { background: var(--group); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; }
+  .group > .row + .row, .wlist > .row + .row, .group > .preview + .row, .tz-results > :first-child { border-top: 1px solid var(--sep); }
+  .row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; min-height: 44px; }
+  .row-text { flex: 1; min-width: 0; }
+  .row-label { display: block; }
+  .row-desc, .status { margin: 1px 0 0; color: var(--text-2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status .custom { color: var(--blue-text); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+  .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 1.5px rgba(10,132,255,.35); }
+  .status .other { display: inline-flex; align-items: center; gap: 4px; }
+  .status .other svg { width: 11px; height: 11px; }
+  .row.is-custom .row-label { font-weight: 500; }
+  .row-ctl { flex: none; display: flex; align-items: center; gap: 10px; }
+  .reset-slot { width: 26px; height: 26px; display: grid; place-items: center; }
+  .reset { width: 26px; height: 26px; border-radius: 13px; border: 1px solid rgba(255,255,255,.12); background: var(--group-2); display: grid; place-items: center; cursor: pointer; }
+  .reset:hover { background: #48484a; }
+  .reset svg { width: 13px; height: 13px; }
+  .reset[hidden] { display: none; }
+  .val { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .row.is-disabled .row-label, .row.is-disabled .val { color: #77777c; }
+  .note { display: flex; gap: 8px; align-items: flex-start; color: var(--text-2); margin: 8px 4px 0; }
+  .note svg { flex: none; width: 14px; height: 14px; margin-top: 1px; }
+  .kv { color: var(--text-2); }
+  kbd { font: 600 12px var(--font); background: #3a3a3c; border: 1px solid rgba(255,255,255,.14); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; margin-left: 3px; color: var(--text); }
+
+  /* switch */
+  .switch { appearance: none; -webkit-appearance: none; margin: 0; position: relative; width: 38px; height: 22px; border-radius: 11px; background: #4a4a4e; border: 1px solid rgba(255,255,255,.1); cursor: pointer; transition: background .15s; flex: none; }
+  .switch::before { content: ""; position: absolute; top: 1px; left: 1px; width: 18px; height: 18px; border-radius: 50%; background: #e9e9ee; box-shadow: 0 1px 2px rgba(0,0,0,.4); transition: transform .15s; }
+  .switch:checked { background: var(--blue); }
+  .switch:checked::before { transform: translateX(16px); background: #fff; }
+  .switch:disabled, .check:disabled, input[type=range]:disabled { opacity: .45; cursor: default; }
+  .switch:focus-visible, .check:focus-visible { outline-offset: 3px; border-radius: 11px; }
+  /* checkbox */
+  .check { appearance: none; -webkit-appearance: none; margin: 0; width: 16px; height: 16px; border-radius: 4px; border: 1px solid #7a7a80; background: #3a3a3c; position: relative; cursor: pointer; }
+  .check:checked { background: var(--blue); border-color: var(--blue); }
+  .check:checked::after { content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .check:focus-visible { border-radius: 4px; }
+  /* range */
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 210px; height: 22px; background: transparent; margin: 0; cursor: pointer; --p: 50%; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--blue) var(--p), #5a5a5e var(--p)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--blue) var(--p), #5a5a5e var(--p)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #f2f2f7; border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #f2f2f7; border: 0; }
+  input[type=range]:focus-visible { border-radius: 11px; }
+  /* segmented */
+  .seg { display: inline-flex; background: #3a3a3c; border-radius: 7px; padding: 2px; gap: 2px; }
+  .seg label { position: relative; padding: 2px 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg label:has(input:checked) { background: #6b6b70; color: #fff; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .seg label:has(input:disabled) { opacity: .5; cursor: default; }
+
+  /* previews */
+  .preview { padding: 12px 14px; }
+  .desk { position: relative; height: 70px; border-radius: 8px; overflow: hidden; background: linear-gradient(120deg, #5b4b8a, #2b6c8f 55%, #c46b5a); }
+  .pbar { position: absolute; top: 0; left: 0; right: 0; height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 10.5px; color: #f2f2f7; }
+  .ptab { padding: 1px 7px; border-radius: 4px; background: rgba(255,255,255,.1); white-space: nowrap; }
+  .ptab.on { background: rgba(255,255,255,.22); }
+  .pw { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .pw svg { width: 10px; height: 10px; }
+  .psep { width: 1px; height: 11px; background: rgba(255,255,255,.4); }
+  .pspacer { flex: 1; }
+  .pclock { font-weight: 600; white-space: nowrap; }
+  .pcap { margin: 6px 0 0; font-size: 12px; color: var(--text-2); }
+  .ndesk { height: 64px; }
+  .npill { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border-radius: 0 0 12px 12px; background: #000; display: grid; place-items: center; font-size: 10px; color: #c7c7cc; }
+  .nexp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px dashed rgba(255,255,255,.55); border-top: 0; border-radius: 0 0 14px 14px; }
+  .ncam { position: absolute; top: 0; left: 50%; transform: translateX(-50%); height: 9px; width: 54px; border-radius: 0 0 6px 6px; background: #000; border: 1px solid rgba(255,255,255,.25); border-top: 0; }
+  .nhidden { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 12px; background: rgba(0,0,0,.25); }
+
+  /* widgets */
+  .wcols { display: flex; align-items: center; gap: 12px; padding: 7px 14px; border-bottom: 1px solid var(--sep); color: var(--text-2); font-size: 12px; }
+  .wcols .c1 { flex: 1; padding-left: 62px; }
+  .col { width: 52px; display: flex; justify-content: center; }
+  .col-sep { width: 96px; }
+  .wlist { list-style: none; margin: 0; padding: 0; }
+  .wrow { gap: 10px; padding-left: 8px; background: var(--group); }
+  .wrow:last-child { border-radius: 0 0 10px 10px; }
+  .wrow.sep-after { box-shadow: inset 0 -2px 0 rgba(255,255,255,.18); }
+  .wrow.dragging { opacity: .45; }
+  .wrow.drop-before { box-shadow: inset 0 2px 0 var(--blue); }
+  .wrow.drop-after { box-shadow: inset 0 -2px 0 var(--blue); }
+  .handle { width: 22px; height: 28px; border: 0; background: transparent; color: #8e8e93; border-radius: 5px; cursor: grab; display: grid; place-items: center; }
+  .handle svg { width: 10px; height: 14px; }
+  .wicon { width: 26px; height: 26px; border-radius: 6px; background: #3a3a3c; display: grid; place-items: center; flex: none; }
+  .wicon svg { width: 15px; height: 15px; }
+  .order-row { border-bottom: 1px solid var(--sep); }
+
+  /* lists */
+  .tz-time { color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .tz-search { width: 100%; border: 1px solid rgba(255,255,255,.12); background: #1f1f21; border-radius: 6px; padding: 5px 10px; }
+  .tz-results { list-style: none; margin: 0; padding: 0; }
+  .empty { padding: 12px 14px; color: var(--text-2); }
+  .pstatus { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .pstatus svg { width: 14px; height: 14px; }
+  .pstatus.ok { color: #5fe07a; }
+  .pstatus.pending { color: #ffc46b; }
+  .pstatus.none { color: var(--text-2); }
+  .picon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; flex: none; }
+  .picon svg { width: 16px; height: 16px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="artboard">
+  <div class="chrome">
+    <p class="chrome-title"><b>01 · Scope toolbar</b>Display scope lives in the toolbar; sidebar badges count custom settings.</p>
+    <div class="demo">
+      <span id="demo-label">Demo · Connected displays:</span>
+      <div class="demo-seg" role="radiogroup" aria-labelledby="demo-label">
+        <button type="button" role="radio" data-mode="1" aria-checked="false">1</button>
+        <button type="button" role="radio" data-mode="2" aria-checked="true">2</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="window" role="group" aria-label="SmartWindow Settings window">
+    <nav class="sidebar" aria-label="Settings sections">
+      <div class="lights" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="search">
+        <label for="side-search" class="sr-only">Search settings</label>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/></svg>
+        <input id="side-search" type="search" placeholder="Search">
+      </div>
+      <div id="side-groups"></div>
+    </nav>
+    <div class="content">
+      <div class="toolbar">
+        <button type="button" class="navbtn" id="back" aria-label="Back"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg></button>
+        <button type="button" class="navbtn" id="fwd" aria-label="Forward"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></button>
+        <h1 id="title">Bar</h1>
+        <div class="scope-slot" id="scope-slot"></div>
+      </div>
+      <main id="main" tabindex="-1" aria-labelledby="title"></main>
+    </div>
+  </div>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+</div>
+
+<script>
+(() => {
+  // ---------- icons ----------
+  const S = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+  const ICON = {
+    general: S('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+    bar: S('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18" stroke-width="3"/>'),
+    widgets: S('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
+    notch: S('<rect x="3" y="4" width="18" height="16" rx="2"/><rect x="8" y="4" width="8" height="3.5" rx="1.75" fill="currentColor"/>'),
+    clock: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    tailscale: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2.3" opacity=".45"/><circle cx="12" cy="5" r="2.3" opacity=".45"/><circle cx="19" cy="5" r="2.3" opacity=".45"/><circle cx="5" cy="12" r="2.3"/><circle cx="12" cy="12" r="2.3"/><circle cx="19" cy="12" r="2.3"/><circle cx="5" cy="19" r="2.3" opacity=".45"/><circle cx="12" cy="19" r="2.3"/><circle cx="19" cy="19" r="2.3" opacity=".45"/></svg>`,
+    permissions: S('<path d="M8 13V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.6-2.2L3.6 14.6a1.6 1.6 0 0 1 2.4-2.1L8 14.5"/>'),
+    reset: S('<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4.5h4.5"/>', 'stroke-width="2.4"'),
+    globe: S('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
+    monitor: S('<rect x="2.5" y="4" width="19" height="12" rx="1.5"/><path d="M9 20h6M12 16v4"/>'),
+    laptop: S('<rect x="4.5" y="5" width="15" height="10" rx="1.5"/><path d="M2 18.5h20"/><path d="M10.5 5h3v1.3h-3z" fill="currentColor"/>'),
+    displays: S('<rect x="2" y="7" width="13" height="9" rx="1.5"/><rect x="9" y="3" width="13" height="9" rx="1.5"/><path d="M6 20h5"/>'),
+    unplug: S('<path d="M4 4l16 16"/><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-1.5 3.6M12 21v-4"/>'),
+    star: S('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
+    info: S('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
+    grip: `<svg viewBox="0 0 10 14" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="2" r="1.3"/><circle cx="7.5" cy="2" r="1.3"/><circle cx="2.5" cy="7" r="1.3"/><circle cx="7.5" cy="7" r="1.3"/><circle cx="2.5" cy="12" r="1.3"/><circle cx="7.5" cy="12" r="1.3"/></svg>`,
+    chev: `<svg viewBox="0 0 9 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4.5L4.5 1.5l3 3M1.5 7.5l3 3 3-3"/></svg>`,
+    ok: S('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/>'),
+    ask: S('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 17v.3"/>'),
+    none: S('<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>'),
+    x: S('<path d="M7 7l10 10M17 7L7 17"/>'),
+    plus: S('<path d="M12 5v14M5 12h14"/>'),
+    music: S('<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>'),
+    access: S('<circle cx="12" cy="4.5" r="1.8"/><path d="M5 8l7 1.5L19 8M12 9.5v4.5l-3 6M12 14l3 6"/>'),
+    disk: S('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 14h18M16.5 16.5h.5"/>'),
+    moon: S('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
+  };
+  const WICON = {
+    memory: S('<rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 17v3M11 17v3M15 17v3M7 10v4M11 10v4M15 10v4"/>'),
+    cpu: S('<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>'),
+    temperature: S('<path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v7"/>'),
+    gpu: S('<rect x="2.5" y="6" width="19" height="11" rx="1.5"/><circle cx="9" cy="11.5" r="3"/><path d="M15 9.5h3M15 13.5h3M5 17v2"/>'),
+    battery: S('<rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><rect x="5" y="10" width="9" height="4" rx=".5" fill="currentColor" stroke="none"/>'),
+    microphone: S('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'),
+    volume: S('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
+    tailscale: ICON.tailscale,
+    keyboard: S('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
+  };
+
+  // ---------- data ----------
+  const WIDGETS = [
+    { id: 'memory', name: 'Memory', sample: '8.2 GB' },
+    { id: 'cpu', name: 'CPU', sample: '18%' },
+    { id: 'temperature', name: 'Temperature', sample: 'temp' },
+    { id: 'gpu', name: 'GPU', sample: '9%' },
+    { id: 'battery', name: 'Battery', sample: '86%' },
+    { id: 'microphone', name: 'Microphone', sample: '' },
+    { id: 'volume', name: 'Volume', sample: '60%' },
+    { id: 'tailscale', name: 'Tailscale VPN', sample: '' },
+    { id: 'keyboard', name: 'Keyboard input', sample: 'ES' },
+  ];
+  const W = Object.fromEntries(WIDGETS.map(w => [w.id, w]));
+
+  const DISPLAYS = {
+    lg:  { id: 'lg',  name: 'LG ULTRAWIDE', res: '2560×1080', kind: 'External display', main: true,  builtin: false, connected: true,  camera: false },
+    mbp: { id: 'mbp', name: 'MacBook Pro',  res: '1512×982',  kind: 'Built-in Retina display', main: false, builtin: true,  connected: false, camera: true },
+  };
+
+  const defaults = {
+    opacity: 94,
+    order: WIDGETS.map(w => w.id),
+    notchShow: true, notchIdle: true, notchBg: 'black', notchW: 280, notchH: 34, notchX: 0,
+  };
+  WIDGETS.forEach((w, i) => { defaults[`w.${w.id}.visible`] = i < 5; defaults[`w.${w.id}.sep`] = w.id === 'battery'; });
+
+  const state = {
+    mode: 2,          // connected displays (demo)
+    scope: 'default', // 'default' | display id
+    page: 'bar',
+    confirmReset: false,
+    defaults,
+    overrides: {
+      lg:  { opacity: 100, 'w.tailscale.visible': true, notchX: 40 },
+      mbp: { notchW: 180, notchH: 33 },
+    },
+    app: {
+      launch: true, focus: false, unit: 'C', clockShow: 'local',
+      zones: ['America/New_York', 'Europe/Madrid'], zoneQuery: '',
+      perms: { ax: 'granted', spotify: 'check', music: 'notasked', fda: 'granted', focus: 'granted' },
+    },
+    hist: ['bar'], histIdx: 0, sideQuery: '',
+  };
+
+  const PAGES = {
+    general:     { title: 'General', color: '#8e8e93', scoped: false },
+    bar:         { title: 'Bar', color: '#ff375f', scoped: true, noun: 'bar' },
+    widgets:     { title: 'Widgets', color: '#0a84ff', scoped: true, noun: 'widget' },
+    notch:       { title: 'Notch', color: '#5e5ce6', scoped: true, noun: 'notch' },
+    clock:       { title: 'Clock', color: '#ff9f0a', scoped: false },
+    tailscale:   { title: 'Tailscale', color: '#30b0c7', scoped: false },
+    permissions: { title: 'Permissions', color: '#0a84ff', scoped: false },
+  };
+  const NAV = [
+    { label: null, items: ['general'] },
+    { label: 'Per display', items: ['bar', 'widgets', 'notch'] },
+    { label: 'App · all displays', items: ['clock', 'tailscale', 'permissions'] },
+  ];
+  const pageOf = k => k === 'opacity' ? 'bar' : (k === 'order' || k.startsWith('w.')) ? 'widgets' : k.startsWith('notch') ? 'notch' : null;
+
+  // ---------- state helpers ----------
+  const scope = () => state.mode === 1 ? 'default' : state.scope;
+  const isCustom = (k, s = scope()) => s !== 'default' && Object.prototype.hasOwnProperty.call(state.overrides[s], k);
+  const get = (k, s = scope()) => isCustom(k, s) ? state.overrides[s][k] : state.defaults[k];
+  const set = (k, v) => { const s = scope(); if (s === 'default') state.defaults[k] = v; else state.overrides[s][k] = v; };
+  const reset = k => { const s = scope(); if (s !== 'default') delete state.overrides[s][k]; };
+  const count = (s, page) => s === 'default' ? 0 : Object.keys(state.overrides[s]).filter(k => !page || pageOf(k) === page).length;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  function fmt(k, v) {
+    if (k === 'opacity') return `${v}%`;
+    if (k === 'notchW' || k === 'notchH') return `${v} pt`;
+    if (k === 'notchX') return +v === 0 ? 'Same' : `+${v} pt`;
+    if (k === 'notchBg') return v === 'black' ? 'Black' : 'Match bar color';
+    if (k === 'notchShow' || k === 'notchIdle') return v ? 'On' : 'Off';
+    if (k === 'order') return 'custom order';
+    if (k.endsWith('.visible')) return v ? 'Shown' : 'Hidden';
+    if (k.endsWith('.sep')) return v ? 'separator after' : 'no separator';
+    return String(v);
+  }
+  const fmtKeys = (keys, s) => keys.map(k => fmt(k, s === 'default' ? state.defaults[k] : get(k, s))).join(', ');
+
+  function statusHTML(keys) {
+    if (state.mode === 1) return '';
+    const s = scope();
+    if (s === 'default') {
+      const others = Object.values(DISPLAYS).filter(d => keys.some(k => isCustom(k, d.id)));
+      if (keys[0] === 'order') {
+        return others.map(d => `<span class="other">${d.builtin ? ICON.laptop : ICON.monitor}${d.name} uses its own order</span>`).join(' · ');
+      }
+      return others.map(d => `<span class="other">${d.builtin ? ICON.laptop : ICON.monitor}${d.name} uses ${fmtKeys(keys, d.id)}</span>`).join(' · ');
+    }
+    if (keys.some(k => isCustom(k, s))) {
+      const def = keys[0] === 'order' ? 'standard order' : keys.map(k => fmt(k, state.defaults[k])).join(', ');
+      return `<span class="custom"><span class="dot" aria-hidden="true"></span>Custom</span> · Default is ${def}`;
+    }
+    return keys[0] === 'order' ? 'Default order' : `Default · ${fmtKeys(keys, s)}`;
+  }
+
+  // ---------- rendering ----------
+  const $ = (q, r = document) => r.querySelector(q);
+  const $$ = (q, r = document) => [...r.querySelectorAll(q)];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const live = msg => { const el = $('#live'); el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); };
+
+  function keepFocus(fn) {
+    const id = document.activeElement && document.activeElement.id;
+    fn();
+    if (id && document.getElementById(id) && document.activeElement !== document.getElementById(id)) document.getElementById(id).focus();
+  }
+
+  function renderDemo() {
+    $$('.demo-seg [data-mode]').forEach(b => b.setAttribute('aria-checked', String(+b.dataset.mode === state.mode)));
+  }
+
+  function renderSidebar() {
+    const q = state.sideQuery.trim().toLowerCase();
+    let html = '', any = false;
+    NAV.forEach((g, gi) => {
+      const items = g.items.filter(id => !q || PAGES[id].title.toLowerCase().includes(q));
+      if (!items.length) return;
+      any = true;
+      const hid = `side-h-${gi}`;
+      if (g.label) html += `<p class="side-h" id="${hid}">${g.label}</p>`;
+      html += `<ul class="side-list" ${g.label ? `aria-labelledby="${hid}"` : 'aria-label="General"'}>`;
+      items.forEach(id => {
+        const p = PAGES[id];
+        const n = p.scoped && state.mode === 2 ? count(scope(), id) : 0;
+        const badge = n ? `<span class="badge" aria-hidden="true">${n}</span><span class="sr-only">, ${plural(n, 'custom setting', 'custom settings')} for ${DISPLAYS[scope()].name}</span>` : '';
+        html += `<li><button type="button" class="side-item" id="nav-${id}" data-page="${id}" ${state.page === id ? 'aria-current="page"' : ''}>
+          <span class="ic" style="background:${p.color}">${ICON[id]}</span><span class="name">${p.title}</span>${badge}</button></li>`;
+      });
+      html += '</ul>';
+    });
+    if (!any) html = `<p class="side-empty">No results</p>`;
+    keepFocus(() => { $('#side-groups').innerHTML = html; });
+  }
+
+  function renderToolbar() {
+    const p = PAGES[state.page];
+    $('#title').textContent = p.title;
+    $('#back').disabled = state.histIdx === 0;
+    $('#fwd').disabled = state.histIdx >= state.hist.length - 1;
+    let html;
+    if (p.scoped && state.mode === 2) {
+      const s = state.scope;
+      html = `<label class="scope-label" for="scope">Settings for:</label>
+        <span class="popup ${s !== 'default' ? 'is-display' : ''}">
+          <select id="scope" aria-describedby="scope-hint">
+            <option value="default" ${s === 'default' ? 'selected' : ''}>Default</option>
+            <optgroup label="Displays">
+              ${Object.values(DISPLAYS).map(d => `<option value="${d.id}" ${s === d.id ? 'selected' : ''}>${d.name}${d.main ? ' — Main' : ''}${d.connected ? '' : ' — Not connected'}</option>`).join('')}
+            </optgroup>
+          </select>${ICON.chev}
+        </span><span id="scope-hint" class="sr-only">Choose Default to edit all displays, or a display to customize only that one.</span>`;
+    } else if (p.scoped) {
+      html = `<span class="chip">${ICON.laptop}<span>Only display: MacBook Pro</span></span>`;
+    } else {
+      html = `<span class="chip">${ICON.globe}<span>Applies to all displays</span></span>`;
+    }
+    keepFocus(() => { $('#scope-slot').innerHTML = html; });
+  }
+
+  function bannerHTML() {
+    const page = state.page;
+    if (state.mode === 1) {
+      const d = DISPLAYS.mbp;
+      return `<section class="banner" aria-label="Display being edited">
+        <div class="b-ic">${ICON.laptop}</div>
+        <div class="b-body">
+          <div class="b-title">${d.name} <span class="tag">Built-in</span><span class="tag">Main</span></div>
+          <div class="b-meta">${d.kind} · ${d.res}</div>
+          <p class="b-line muted">Only one display is connected, so these settings apply to it directly. Connect another display to customize each one separately.</p>
+        </div></section>`;
+    }
+    const s = state.scope;
+    if (s === 'default') {
+      const lines = Object.values(DISPLAYS).map(d => {
+        const n = count(d.id);
+        const here = count(d.id, page);
+        return n
+          ? `<li><span><b>${d.name}</b> customizes ${plural(n, 'setting', 'settings')}${here ? ` (${here} on this page)` : ''}.</span>
+               <button type="button" class="link" data-scope="${d.id}" id="jump-${d.id}">Edit ${d.name}</button></li>`
+          : `<li class="kv"><span><b style="color:var(--text)">${d.name}</b>: No custom settings — uses Default.</span></li>`;
+      }).join('');
+      return `<section class="banner" aria-label="Display being edited">
+        <div class="b-ic">${ICON.displays}</div>
+        <div class="b-body">
+          <div class="b-title">Default <span class="tag">All displays</span></div>
+          <p class="b-line muted">Applies to every display without its own setting.</p>
+          <ul class="b-list">${lines}</ul>
+        </div></section>`;
+    }
+    const d = DISPLAYS[s];
+    const total = count(s), here = count(s, page);
+    const tags = [
+      d.main ? `<span class="tag">${ICON.star}Main</span>` : '',
+      d.builtin ? `<span class="tag">Built-in</span>` : '',
+      d.camera ? `<span class="tag">Camera notch</span>` : '',
+      !d.connected ? `<span class="tag warn">${ICON.unplug}Not connected</span>` : `<span class="tag">Connected</span>`,
+    ].join('');
+    const pageLine = total === 0
+      ? 'No custom settings — uses Default.'
+      : here
+        ? `${plural(here, 'custom setting', 'custom settings')} on this page · ${total} in total. Everything else uses Default.`
+        : `No custom ${PAGES[page].noun} settings — uses Default. (${total} custom elsewhere.)`;
+    const actions = state.confirmReset
+      ? `<span>Reset ${plural(total, 'setting', 'settings')}?</span>
+         <button type="button" class="btn" data-action="cancel-reset" id="reset-cancel">Cancel</button>
+         <button type="button" class="btn danger" data-action="do-reset" id="reset-do">Reset</button>`
+      : `<button type="button" class="btn" data-action="ask-reset" id="reset-all" ${total ? '' : 'disabled'}>Reset all settings for ${d.name}…</button>`;
+    return `<section class="banner is-display" aria-label="Display being edited">
+      <div class="b-ic">${d.builtin ? ICON.laptop : ICON.monitor}</div>
+      <div class="b-body">
+        <div class="b-title">Editing ${d.name} ${tags}</div>
+        <div class="b-meta">${d.kind} · ${d.res}</div>
+        ${!d.connected ? `<p class="b-line muted">The lid is closed. Its settings are remembered and apply the next time it is connected.</p>` : ''}
+        <p class="b-line">${pageLine}</p>
+      </div>
+      <div class="b-actions">${actions}</div></section>`;
+  }
+
+  // Row with a status line and a reset slot. `ctl` is the control HTML; `forId` labels it.
+  function row({ keys, label, desc = '', ctl, forId, labelId, dep }) {
+    const lab = forId ? `<label class="row-label" for="${forId}">${label}</label>` : `<span class="row-label" id="${labelId}">${label}</span>`;
+    const sid = `st-${keys.split(' ')[0].replace(/\./g, '-')}`;
+    return `<div class="row" data-keys="${keys}" ${dep ? `data-dep="${dep}"` : ''}>
+      <div class="row-text">${lab}${desc ? `<p class="row-desc">${desc}</p>` : ''}<p class="status" id="${sid}"></p></div>
+      <div class="row-ctl"><span class="reset-slot"><button type="button" class="reset" data-reset="${keys}" aria-label="Reset ${label} to Default" title="Reset to Default" hidden>${ICON.reset}</button></span>${ctl}</div>
+    </div>`;
+  }
+  const range = (k, min, max, step, label) =>
+    `<input type="range" id="c-${k}" data-set="${k}" min="${min}" max="${max}" step="${step}" aria-describedby="st-${k}"><output class="val" for="c-${k}" id="o-${k}" aria-hidden="true"></output>`;
+  const sw = (k) => `<input type="checkbox" role="switch" class="switch" id="c-${k}" data-set="${k}" aria-describedby="st-${k}">`;
+
+  function barPreviewHTML(id) {
+    return `<div class="preview"><div class="desk" aria-hidden="true"><div class="pbar" id="${id}"></div></div>
+      <p class="pcap">Preview${state.mode === 2 ? (scope() === 'default' ? ' · Default' : ` · ${DISPLAYS[scope()].name}`) : ''}</p></div>`;
+  }
+
+  function pageBar() {
+    return `<h2 id="h-appearance">Appearance</h2>
+      <div class="group" role="group" aria-labelledby="h-appearance">
+        ${barPreviewHTML('pv-bar')}
+        ${row({ keys: 'opacity', label: 'Bar opacity', desc: 'How much of the desktop shows through the bar.', forId: 'c-opacity', ctl: range('opacity', 60, 100, 1) })}
+      </div>
+      <p class="note">${ICON.info}<span>Which widgets appear in the bar is set in <button type="button" class="link" data-page="widgets" id="go-widgets">Widgets</button>; the clock is set in <button type="button" class="link" data-page="clock" id="go-clock">Clock</button>.</span></p>`;
+  }
+
+  function pageWidgets() {
+    const order = get('order');
+    const n = order.length;
+    const items = order.map((id, i) => {
+      const w = W[id], keys = `w.${id}.visible w.${id}.sep`;
+      return `<li class="row wrow" data-keys="${keys}" data-id="${id}" draggable="true">
+        <button type="button" class="handle" id="h-${id}" data-move="${id}" aria-label="Reorder ${w.name}, position ${i + 1} of ${n}" aria-describedby="order-help">${ICON.grip}</button>
+        <span class="wicon">${WICON[id]}</span>
+        <div class="row-text"><span class="row-label">${w.name}</span><p class="status" id="st-w-${id}-visible"></p></div>
+        <div class="row-ctl">
+          <span class="reset-slot"><button type="button" class="reset" data-reset="${keys}" aria-label="Reset ${w.name} to Default" title="Reset to Default" hidden>${ICON.reset}</button></span>
+          <span class="col"><input type="checkbox" role="switch" class="switch" id="c-w-${id}-visible" data-set="w.${id}.visible" aria-label="Show ${w.name}" aria-describedby="st-w-${id}-visible"></span>
+          <span class="col col-sep"><input type="checkbox" class="check" id="c-w-${id}-sep" data-set="w.${id}.sep" aria-label="Separator after ${w.name}"></span>
+        </div></li>`;
+    }).join('');
+    return `<h2 id="h-preview">In the bar</h2>
+      <div class="group">${barPreviewHTML('pv-widgets')}</div>
+      <h2 id="h-wl">Widgets</h2>
+      <p class="sub" id="order-help">Shown left to right after the window tabs. Drag a row, or focus its handle and press ↑ or ↓ to move it.</p>
+      <div class="group" role="group" aria-labelledby="h-wl">
+        ${row({ keys: 'order', label: 'Order', labelId: 'lbl-order', ctl: '' }).replace('class="row"', 'class="row order-row"')}
+        <div class="wcols" aria-hidden="true"><span class="c1">Widget</span><span class="reset-slot"></span><span class="col">Visible</span><span class="col col-sep">Separator after</span></div>
+        <ul class="wlist" aria-labelledby="h-wl">${items}</ul>
+      </div>
+      <p class="note">${ICON.clock}<span>The clock is always at the far right of the bar. Its timezones are set in <button type="button" class="link" data-page="clock" id="go-clock2">Clock</button>.</span></p>`;
+  }
+
+  function pageNotch() {
+    const s = scope();
+    const cam = state.mode === 1 || (s !== 'default' && DISPLAYS[s].camera);
+    return `<h2 id="h-nv">Visibility</h2>
+      <div class="group" role="group" aria-labelledby="h-nv">
+        ${row({ keys: 'notchShow', label: s === 'default' && state.mode === 2 ? 'Show notch on displays' : 'Show notch on this display', forId: 'c-notchShow', ctl: sw('notchShow') })}
+        ${row({ keys: 'notchIdle', label: 'Show when nothing is playing', desc: 'Keeps the pill as a clock and HUD when no media plays.', forId: 'c-notchIdle', ctl: sw('notchIdle'), dep: 'notchShow' })}
+      </div>
+      <h2 id="h-na">Appearance</h2>
+      <div class="group" role="group" aria-labelledby="h-na">
+        ${row({ keys: 'notchBg', label: 'Background', labelId: 'lbl-notchBg', dep: 'notchShow',
+          ctl: `<div class="seg" role="radiogroup" aria-labelledby="lbl-notchBg" aria-describedby="st-notchBg">
+            <label><input type="radio" name="notchBg" value="black" data-set="notchBg" id="c-notchBg-black">Black</label>
+            <label><input type="radio" name="notchBg" value="bar" data-set="notchBg" id="c-notchBg-bar">Match bar color</label></div>` })}
+      </div>
+      <h2 id="h-ns">Size</h2>
+      <div class="group" role="group" aria-labelledby="h-ns">
+        <div class="preview"><div class="desk ndesk" aria-hidden="true" id="pv-notch"></div>
+          <p class="pcap">Preview at 60% scale · dashed outline shows the expanded width${cam ? ' · this display has a camera notch' : ''}</p></div>
+        ${row({ keys: 'notchW', label: 'Width', forId: 'c-notchW', ctl: range('notchW', 180, 440, 1), dep: 'notchShow' })}
+        ${row({ keys: 'notchH', label: 'Height', forId: 'c-notchH', ctl: range('notchH', 30, 46, 1), dep: 'notchShow' })}
+        ${row({ keys: 'notchX', label: 'Expanded width', desc: 'Extra width while media or a HUD is expanded.', forId: 'c-notchX', ctl: range('notchX', 0, 200, 5), dep: 'notchShow' })}
+      </div>
+      <p class="note">${ICON.info}<span>On displays with a camera notch, the width includes the camera.</span></p>`;
+  }
+
+  const appwide = `<p class="appwide">${ICON.globe}<span>App setting · applies to all displays</span></p>`;
+
+  function pageGeneral() {
+    const a = state.app;
+    return `${appwide}
+      <h2 id="h-gs">Startup</h2>
+      <div class="group" role="group" aria-labelledby="h-gs">
+        <div class="row"><div class="row-text"><label class="row-label" for="a-launch">Launch at login</label></div>
+          <input type="checkbox" role="switch" class="switch" id="a-launch" data-app="launch" ${a.launch ? 'checked' : ''}></div>
+      </div>
+      <h2 id="h-gb">Behavior</h2>
+      <div class="group" role="group" aria-labelledby="h-gb">
+        <div class="row"><div class="row-text"><label class="row-label" for="a-focus">Focus mode</label><p class="row-desc" id="d-focus">Hides secondary widgets on all displays.</p></div>
+          <input type="checkbox" role="switch" class="switch" id="a-focus" data-app="focus" aria-describedby="d-focus" ${a.focus ? 'checked' : ''}></div>
+        <div class="row"><div class="row-text"><span class="row-label" id="lbl-unit">Temperature unit</span></div>
+          <div class="seg" role="radiogroup" aria-labelledby="lbl-unit">
+            <label><input type="radio" name="unit" value="C" data-app="unit" ${a.unit === 'C' ? 'checked' : ''}>Celsius</label>
+            <label><input type="radio" name="unit" value="F" data-app="unit" ${a.unit === 'F' ? 'checked' : ''}>Fahrenheit</label></div></div>
+      </div>
+      <h2 id="h-gk">Keyboard shortcuts</h2>
+      <div class="group" role="group" aria-labelledby="h-gk">
+        <div class="row"><span class="row-text">Next window</span><span><kbd>⌥</kbd><kbd>]</kbd></span></div>
+        <div class="row"><span class="row-text">Previous window</span><span><kbd>⌥</kbd><kbd>[</kbd></span></div>
+        <div class="row"><span class="row-text">Jump to tab 1–9</span><span><kbd>⌥</kbd><kbd>1</kbd> … <kbd>9</kbd></span></div>
+      </div>
+      <h2 id="h-ga">About</h2>
+      <div class="group" role="group" aria-labelledby="h-ga">
+        <div class="row"><span class="row-text">SmartWindow</span><span class="kv">Version 0.4.0</span></div>
+      </div>`;
+  }
+
+  const ZONES = ['America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York', 'America/Mexico_City', 'America/Bogota', 'America/Sao_Paulo', 'Europe/London', 'Europe/Madrid', 'Europe/Paris', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'];
+  const zoneTime = z => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: z, hour: '2-digit', minute: '2-digit' }).format(new Date()); } catch { return ''; } };
+  const zoneName = z => z.split('/').pop().replace(/_/g, ' ');
+
+  function tzResultsHTML() {
+    const q = state.app.zoneQuery.trim().toLowerCase();
+    if (!q) return '';
+    const res = ZONES.filter(z => !state.app.zones.includes(z) && z.toLowerCase().replace(/_/g, ' ').includes(q)).slice(0, 6);
+    if (!res.length) return `<li class="empty">No timezone matches “${esc(state.app.zoneQuery)}”.</li>`;
+    return res.map(z => `<li class="row"><div class="row-text"><span class="row-label">${zoneName(z)}</span><p class="row-desc">${z}</p></div>
+      <span class="tz-time">${zoneTime(z)}</span>
+      <button type="button" class="btn" data-addzone="${z}" id="add-${z.replace(/\W/g, '-')}" aria-label="Add ${z}">Add</button></li>`).join('');
+  }
+
+  function pageClock() {
+    const a = state.app;
+    const list = a.zones.length
+      ? a.zones.map(z => `<li class="row"><div class="row-text"><span class="row-label">${zoneName(z)}</span><p class="row-desc">${z}</p></div>
+          <span class="tz-time">${zoneTime(z)}</span>
+          <button type="button" class="reset" data-rmzone="${z}" id="rm-${z.replace(/\W/g, '-')}" aria-label="Remove ${z}" title="Remove">${ICON.x}</button></li>`).join('')
+      : `<li class="empty">No extra timezones. Search below to add one.</li>`;
+    return `${appwide}
+      <h2 id="h-cs">Shown in the bar</h2>
+      <div class="group" role="radiogroup" aria-labelledby="h-cs">
+        <label class="row"><span class="row-text"><span class="row-label">Local time</span><span class="row-desc" style="display:block">Sun 8 Nov 09:41</span></span>
+          <input type="radio" name="clockShow" value="local" data-app="clockShow" class="check" style="border-radius:50%" ${a.clockShow === 'local' ? 'checked' : ''}></label>
+        <label class="row"><span class="row-text"><span class="row-label">Added timezones</span><span class="row-desc" style="display:block">Cycles through the timezones below.</span></span>
+          <input type="radio" name="clockShow" value="zones" data-app="clockShow" class="check" style="border-radius:50%" ${a.clockShow === 'zones' ? 'checked' : ''}></label>
+      </div>
+      <h2 id="h-cz">Extra timezones</h2>
+      <div class="group" role="group" aria-labelledby="h-cz">
+        <ul class="wlist" aria-label="Added timezones">${list}</ul>
+        <div class="row" style="border-top:1px solid var(--sep)"><div class="row-text">
+          <label for="tz-q" class="row-label" style="margin-bottom:6px">Add a timezone</label>
+          <input id="tz-q" type="search" class="tz-search" placeholder="Search city or region, e.g. Tokyo" value="${esc(a.zoneQuery)}" aria-controls="tz-results">
+        </div></div>
+        <ul class="tz-results wlist" id="tz-results" aria-label="Search results">${tzResultsHTML()}</ul>
+      </div>`;
+  }
+
+  function pageTailscale() {
+    return `${appwide}
+      <h2 id="h-ts">Status</h2>
+      <div class="group" role="group" aria-labelledby="h-ts">
+        <div class="row"><span class="row-text">Connection</span><span class="pstatus ok">${ICON.ok}Connected</span></div>
+        <div class="row"><span class="row-text">Tailnet</span><span class="kv">kevnnard.github</span></div>
+        <div class="row"><span class="row-text">This Mac’s IP</span><span class="kv" style="font-variant-numeric:tabular-nums">100.101.12.4</span></div>
+        <div class="row"><span class="row-text">Online for</span><span class="kv">3h 12m</span></div>
+        <div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="open-ts">Open Tailscale</button></div>
+      </div>
+      <p class="note">${ICON.info}<span>Showing Tailscale in the bar is a widget setting, chosen per display in <button type="button" class="link" data-page="widgets" id="go-widgets2">Widgets</button>.</span></p>`;
+  }
+
+  const PERMS = [
+    { id: 'ax', req: true, title: 'Accessibility', icon: 'access', bg: '#0a84ff', desc: 'Reads window titles and switches between windows for the tab bar.' },
+    { id: 'spotify', title: 'Automation: Spotify', icon: 'music', bg: '#1db954', desc: 'Shows and controls what Spotify is playing in the notch.', btn: 'Open Spotify' },
+    { id: 'music', title: 'Automation: Music', icon: 'music', bg: '#fa2d48', desc: 'Shows and controls what Music is playing in the notch.', btn: 'Allow…' },
+    { id: 'fda', title: 'Full Disk Access', icon: 'disk', bg: '#636366', desc: 'Shows which Focus turned on or off. macOS keeps the Focus name in a protected folder.', btn: 'Open Settings…' },
+    { id: 'focus', title: 'Focus Status', icon: 'moon', bg: '#5e5ce6', desc: 'Shows that a Focus is on when Full Disk Access is not granted.', btn: 'Allow…' },
+  ];
+  function permRow(p) {
+    const st = state.app.perms[p.id];
+    const status = st === 'granted' ? `<span class="pstatus ok">${ICON.ok}Granted</span>`
+      : st === 'check' ? `<span class="pstatus pending">${ICON.ask}Open the app to check</span>`
+      : `<span class="pstatus none">${ICON.none}Not asked</span>`;
+    return `<div class="row"><span class="picon" style="background:${p.bg}">${ICON[p.icon]}</span>
+      <div class="row-text"><span class="row-label">${p.title}</span><p class="row-desc">${p.desc}</p></div>
+      ${status}${st !== 'granted' ? `<button type="button" class="btn" data-perm="${p.id}" id="perm-${p.id}" aria-label="${p.btn.replace('…', '')} — ${p.title}">${p.btn}</button>` : ''}</div>`;
+  }
+  function pagePermissions() {
+    return `${appwide}
+      <h2 id="h-pr">Required</h2>
+      <div class="group" role="group" aria-labelledby="h-pr">${PERMS.filter(p => p.req).map(permRow).join('')}</div>
+      <h2 id="h-po">Optional</h2>
+      <p class="sub">SmartWindow works without these; the related feature stays off.</p>
+      <div class="group" role="group" aria-labelledby="h-po">${PERMS.filter(p => !p.req).map(permRow).join('')}</div>`;
+  }
+
+  const RENDER = { general: pageGeneral, bar: pageBar, widgets: pageWidgets, notch: pageNotch, clock: pageClock, tailscale: pageTailscale, permissions: pagePermissions };
+
+  function renderPage() {
+    const p = PAGES[state.page];
+    keepFocus(() => {
+      $('#main').innerHTML = (p.scoped ? `<div id="banner">${bannerHTML()}</div>` : '') + RENDER[state.page]();
+      sync();
+    });
+  }
+
+  // Updates control values, status lines, reset buttons, previews, badges and banner in place.
+  function sync() {
+    const main = $('#main');
+    $$('[data-set]', main).forEach(el => {
+      const k = el.dataset.set, v = get(k);
+      if (el.type === 'range') {
+        el.value = v;
+        const pct = (v - el.min) / (el.max - el.min) * 100;
+        el.style.setProperty('--p', pct + '%');
+        el.setAttribute('aria-valuetext', fmt(k, v));
+        const o = document.getElementById(`o-${k}`); if (o) o.textContent = fmt(k, v);
+      } else if (el.type === 'radio') el.checked = el.value === v;
+      else el.checked = !!v;
+    });
+    $$('.row[data-keys]', main).forEach(r => {
+      const keys = r.dataset.keys.split(' ');
+      const st = $('.status', r); if (st) st.innerHTML = statusHTML(keys);
+      const custom = keys.some(k => isCustom(k));
+      r.classList.toggle('is-custom', custom);
+      const rb = $('.reset', r); if (rb) rb.hidden = !custom;
+      const off = r.dataset.dep && !get(r.dataset.dep);
+      r.classList.toggle('is-disabled', !!off);
+      $$('input', r).forEach(i => { i.disabled = !!off; });
+      if (r.dataset.id) r.classList.toggle('sep-after', !!get(`w.${r.dataset.id}.sep`));
+    });
+    $$('.pbar', main).forEach(drawBar);
+    const pn = $('#pv-notch'); if (pn) drawNotch(pn);
+    const b = $('#banner'); if (b) keepFocus(() => { b.innerHTML = bannerHTML(); });
+    renderSidebar();
+  }
+
+  function drawBar(el) {
+    const op = get('opacity') / 100;
+    const temp = state.app.unit === 'C' ? '42°' : '108°';
+    const ws = get('order').filter(id => get(`w.${id}.visible`));
+    const items = ws.map(id => {
+      const w = W[id];
+      const txt = id === 'temperature' ? temp : w.sample;
+      return `<span class="pw">${WICON[id]}${txt}</span>${get(`w.${id}.sep`) ? '<span class="psep"></span>' : ''}`;
+    }).join('');
+    el.style.background = `rgba(24,24,27,${op})`;
+    el.innerHTML = `<span class="ptab on">Safari</span><span class="ptab">Xcode</span><span class="ptab">Notes</span><span class="pspacer"></span>${items}<span class="pclock">Sun 8 Nov 09:41</span>`;
+  }
+
+  function drawNotch(el) {
+    const k = 0.6, s = scope();
+    const cam = state.mode === 1 || (s !== 'default' && DISPLAYS[s].camera);
+    if (!get('notchShow')) { el.innerHTML = `<div class="nhidden">Notch hidden on ${s === 'default' ? 'displays without their own setting' : 'this display'}</div>`; return; }
+    const w = get('notchW') * k, h = get('notchH') * k, x = (get('notchW') + +get('notchX')) * k;
+    const bg = get('notchBg') === 'black' ? '#000' : `rgba(24,24,27,${get('opacity') / 100})`;
+    el.innerHTML = `${+get('notchX') ? `<div class="nexp" style="width:${x}px;height:${h + 14}px"></div>` : ''}
+      <div class="npill" style="width:${w}px;height:${h}px;background:${bg}">${get('notchIdle') ? '09:41' : ''}</div>
+      ${cam ? '<div class="ncam"></div>' : ''}`;
+  }
+
+  function renderAll() { renderDemo(); renderToolbar(); renderPage(); }
+
+  function go(page, push = true) {
+    if (!PAGES[page]) return;
+    if (push && page !== state.page) {
+      state.hist = state.hist.slice(0, state.histIdx + 1); state.hist.push(page); state.histIdx = state.hist.length - 1;
+    }
+    state.page = page; state.confirmReset = false;
+    renderAll();
+  }
+
+  function setScope(s) {
+    state.scope = s; state.confirmReset = false;
+    renderAll();
+    live(s === 'default' ? 'Editing Default, applies to all displays without their own setting' : `Editing ${DISPLAYS[s].name} only`);
+  }
+
+  function moveWidget(id, delta) {
+    const order = [...get('order')];
+    const i = order.indexOf(id), j = i + delta;
+    if (j < 0 || j >= order.length) return;
+    order.splice(i, 1); order.splice(j, 0, id);
+    set('order', order); renderPage();
+    const h = document.getElementById(`h-${id}`); if (h) h.focus();
+    live(`${W[id].name} moved to position ${j + 1} of ${order.length}`);
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.mode) { state.mode = +t.dataset.mode; state.confirmReset = false; renderAll(); live(`${t.dataset.mode} display${t.dataset.mode === '1' ? '' : 's'} connected`); return; }
+    if (t.dataset.page) { go(t.dataset.page); if (t.classList.contains('link')) $('#main').focus(); return; }
+    if (t.dataset.scope) { setScope(t.dataset.scope); const sel = $('#scope'); if (sel) sel.focus(); return; }
+    if (t.id === 'back' && state.histIdx > 0) { state.histIdx--; go(state.hist[state.histIdx], false); return; }
+    if (t.id === 'fwd' && state.histIdx < state.hist.length - 1) { state.histIdx++; go(state.hist[state.histIdx], false); return; }
+    if (t.dataset.reset) {
+      const keys = t.dataset.reset.split(' ');
+      keys.forEach(reset);
+      const r = t.closest('.row');
+      if (keys[0] === 'order') { renderPage(); $('#main').focus(); }
+      else { sync(); const c = r && $('input:not([disabled])', r); if (c) c.focus(); }
+      live('Reset to Default');
+      return;
+    }
+    if (t.dataset.action === 'ask-reset') { state.confirmReset = true; sync(); $('#reset-cancel').focus(); return; }
+    if (t.dataset.action === 'cancel-reset') { state.confirmReset = false; sync(); $('#reset-all').focus(); return; }
+    if (t.dataset.action === 'do-reset') {
+      const d = DISPLAYS[scope()]; state.overrides[scope()] = {}; state.confirmReset = false;
+      renderPage(); $('#main').focus(); live(`All settings for ${d.name} reset. It now uses Default.`); return;
+    }
+    if (t.dataset.addzone) { state.app.zones.push(t.dataset.addzone); live(`${t.dataset.addzone} added`); renderPage(); $('#tz-q').focus(); return; }
+    if (t.dataset.rmzone) { state.app.zones = state.app.zones.filter(z => z !== t.dataset.rmzone); live(`${t.dataset.rmzone} removed`); renderPage(); $('#tz-q').focus(); return; }
+    if (t.dataset.perm) { state.app.perms[t.dataset.perm] = 'granted'; renderPage(); $('#main').focus(); live('Permission granted'); return; }
+  });
+
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (el.id === 'side-search') { state.sideQuery = el.value; renderSidebar(); return; }
+    if (el.id === 'tz-q') { state.app.zoneQuery = el.value; $('#tz-results').innerHTML = tzResultsHTML(); return; }
+    if (el.dataset.set && el.type === 'range') { set(el.dataset.set, +el.value); sync(); }
+  });
+
+  document.addEventListener('change', e => {
+    const el = e.target;
+    if (el.id === 'scope') { setScope(el.value); $('#scope').focus(); return; }
+    if (el.dataset.set && el.type !== 'range') { set(el.dataset.set, el.type === 'radio' ? el.value : el.checked); sync(); return; }
+    if (el.dataset.app) {
+      state.app[el.dataset.app] = el.type === 'radio' ? el.value : el.checked;
+      return;
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    const h = e.target.closest && e.target.closest('[data-move]');
+    if (h && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); moveWidget(h.dataset.move, e.key === 'ArrowUp' ? -1 : 1); }
+  });
+
+  // drag and drop reordering
+  let dragId = null;
+  document.addEventListener('dragstart', e => {
+    const li = e.target.closest && e.target.closest('.wrow'); if (!li) return;
+    dragId = li.dataset.id; li.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId);
+  });
+  document.addEventListener('dragover', e => {
+    const li = e.target.closest && e.target.closest('.wrow'); if (!li || !dragId) return;
+    e.preventDefault();
+    $$('.wrow').forEach(r => r.classList.remove('drop-before', 'drop-after'));
+    const rect = li.getBoundingClientRect();
+    li.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-before' : 'drop-after');
+  });
+  document.addEventListener('drop', e => {
+    const li = e.target.closest && e.target.closest('.wrow'); if (!li || !dragId) return;
+    e.preventDefault();
+    const order = get('order').filter(id => id !== dragId);
+    let j = order.indexOf(li.dataset.id);
+    if (li.classList.contains('drop-after')) j++;
+    if (li.dataset.id === dragId) j = get('order').indexOf(dragId);
+    order.splice(j, 0, dragId);
+    const moved = dragId; dragId = null;
+    set('order', order); renderPage();
+    live(`${W[moved].name} moved to position ${order.indexOf(moved) + 1} of ${order.length}`);
+  });
+  document.addEventListener('dragend', () => { dragId = null; $$('.wrow').forEach(r => r.classList.remove('dragging', 'drop-before', 'drop-after')); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

@@ -188,7 +188,7 @@ final class SystemMonitorService: ObservableObject {
         )
     }
 
-    private static func defaultOutputDevice() -> AudioDeviceID? {
+    static func defaultOutputDevice() -> AudioDeviceID? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,

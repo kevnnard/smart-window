@@ -29,8 +29,8 @@ final class AppSettings: ObservableObject {
     static let notchDefaultWidth: Double = 280.0
     static let notchDefaultHeight: Double = 34.0
 
-    /// Whether the notch appears on all connected monitors or only the primary screen.
-    @AppStorage("notchShowOnAllDisplays") var notchShowOnAllDisplays: Bool = true
+    /// Stored by the removed "Main display only" option (false meant main display only).
+    static let mainDisplayOnlyKey = "notchShowOnAllDisplays"
     /// Whether the notch stays visible even when no media/player is active.
     @AppStorage("notchAlwaysVisible") var notchAlwaysVisible: Bool = true
     /// User-customized width of the notch (points).
@@ -56,6 +56,35 @@ final class AppSettings: ObservableObject {
         case "Keyboard": return "Keyboard input"
         default: return id
         }
+    }
+
+    /// The Default scope of every per-display bar and notch setting. Show notch's Default lives in
+    /// DisplayPreferences (showNowPlaying), so it is passed in.
+    func displayDefaults(showNotch: Bool) -> DisplayPreferences.Settings {
+        DisplayPreferences.Settings(
+            barOpacity: barOpacity,
+            widgetOrder: widgetOrder,
+            widgetVisibility: widgetVisibility,
+            separators: Set(separatorPositions),
+            showNotch: showNotch,
+            showWhenIdle: notchAlwaysVisible,
+            notchMatchesBar: notchBadgeMatchesBar,
+            notchSize: DisplayPreferences.NotchSize(width: notchCustomWidth, height: notchCustomHeight),
+            expandedExtraWidth: notchExpandedExtraWidth)
+    }
+
+    /// "Main display only" became Show notch per display: turns it off on every known display except
+    /// the main one, then stores All displays so it runs once. Waits while the main display has no
+    /// stable identity. Returns whether it migrated.
+    @discardableResult
+    static func migrateMainDisplayOnly(defaults: UserDefaults = .standard, preferences: DisplayPreferences,
+                                       primaryKey: String?, knownKeys: [String]) -> Bool {
+        guard defaults.object(forKey: mainDisplayOnlyKey) as? Bool == false, let primaryKey else { return false }
+        for key in Set(knownKeys) where key != primaryKey {
+            preferences.setShowNotch(false, on: key)
+        }
+        defaults.set(true, forKey: mainDisplayOnlyKey)
+        return true
     }
 
     /// Drops widgets the bar no longer renders and appends known widgets missing from the
@@ -177,5 +206,12 @@ final class AppSettings: ObservableObject {
         } else {
             self.enabledProviders = ["gemini"]
         }
+    }
+}
+
+extension DisplayPreferences {
+    /// What the bar and notch on this display use: Default (AppSettings) plus its overrides.
+    func effectiveSettings(for key: String?, app: AppSettings = .shared) -> Settings {
+        settings(for: key, defaults: app.displayDefaults(showNotch: showNowPlaying))
     }
 }

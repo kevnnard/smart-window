@@ -1,0 +1,9 @@
+{
+  "title": "Unified per-display Settings",
+  "brief": "One Settings window for SmartWindow where every bar and notch setting can be customized per display. A single scope selector (Default or a specific display) decides what the shown settings apply to; no setting appears twice. With one display, only Default exists.",
+  "artboards": [
+    { "file": "01-scope-toolbar.html", "title": "Scope toolbar", "tradeoff": "Closest to today's sidebar and to System Settings; the scope lives in the toolbar, so it is easy to miss which display you are editing on long pages", "width": 1280, "height": 820 },
+    { "file": "02-display-map.html", "title": "Display map", "tradeoff": "The monitor arrangement and a live bar/notch preview make the scope unmistakable; costs vertical space before the first setting", "width": 1280, "height": 820 },
+    { "file": "03-displays-sidebar.html", "title": "Displays in the sidebar", "tradeoff": "Each display is its own sidebar page with all its bar, widget and notch settings together; most explicit, but the sidebar grows with every monitor and app-wide panes move to a second group", "width": 1280, "height": 820 }
+  ]
+}

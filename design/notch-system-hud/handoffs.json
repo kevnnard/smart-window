@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-wings.html",
+  "handoffs": {
+    "01-wings.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-07T02:50:35.376Z",
+      "startedAt": "2026-11-07T02:50:58.505Z",
+      "implementedAt": "2026-11-07T03:03:28.512Z",
+      "note": "Native SwiftUI: the notch wings widen 280→388 pt for 1.6 s on volume/mute (CoreAudio listeners) and brightness keys (DisplayServices). Accompanies the macOS HUD. The probes pass; it hasn't been tested live on hardware."
+    }
+  }
+}
