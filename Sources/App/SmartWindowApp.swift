@@ -35,6 +35,7 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
     let notchController = NotchController()
     let systemHUD = SystemHUDService()
     let focusStatus = FocusStatusService()
+    let deviceMonitor = DeviceMonitorService()
     private var cancellables = Set<AnyCancellable>()
     private var settingsWindowController: NSWindowController?
 
@@ -63,6 +64,7 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
         notchController.show()
         systemHUD.start()
         focusStatus.start()
+        deviceMonitor.start()
 
         windowManager.$fullscreenScreenFrame
             .removeDuplicates()

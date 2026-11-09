@@ -90,12 +90,13 @@ import Foundation
         let margin = NotchLayout.shadowMargin
         check(margin >= 24 + 10, "the margin fits the drawer shadow radius and offset")
         check(hugging.hudWidth == 185 + 96 * 2, "the tightest notch gets the minimum HUD wings")
-        check(hugging.windowSize == CGSize(width: hugging.hudWidth + margin * 2,
+        let widestHUD = max(hugging.hudWidth, hugging.deviceWingsWidth, hugging.deviceCardWidth)
+        check(hugging.windowSize == CGSize(width: widestHUD + margin * 2,
                                            height: hugging.panelSize(expanded: true).height + margin),
               "the window has room for the widest state plus the shadow margin")
-        check(hugging.visibleRect(expanded: false) == CGRect(x: margin + 64, y: 0, width: 249, height: 38),
+        check(hugging.visibleRect(expanded: false) == CGRect(x: margin + (widestHUD - 249) / 2, y: 0, width: 249, height: 38),
               "compact hover area is the pill at the top")
-        check(hugging.visibleRect(expanded: true) == CGRect(x: margin + 64, y: 0, width: 249, height: 38 + NotchLayout.expandedCardHeight),
+        check(hugging.visibleRect(expanded: true) == CGRect(x: margin + (widestHUD - 249) / 2, y: 0, width: 249, height: 38 + NotchLayout.expandedCardHeight),
               "open hover area is the whole drawer")
         var spacious = hugging
         spacious.expandedExtraWidth = 200

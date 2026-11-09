@@ -71,13 +71,15 @@ struct NotchLayout: Equatable {
     /// window edges would otherwise cut off.
     static let shadowMargin: CGFloat = 36
 
-    /// The notch window keeps this size in both states: resizing a window redraws its content
-    /// late, which moved the compact row. The part not drawn is transparent; the window ignores the
-    /// mouse there (NotchHostingView.updatePointer), so clicks reach the window below.
+    /// The notch window keeps this size in every state: resizing a window redraws its content
+    /// late, which moved the compact row. It fits the drawer, the level and device wings and the
+    /// device drop card. The part not drawn is transparent; the window ignores the mouse there
+    /// (NotchHostingView.updatePointer), so clicks reach the window below.
     var windowSize: CGSize {
         let drawer = panelSize(expanded: true)
-        let width = max(drawer.width, hudWidth)
-        return CGSize(width: width + Self.shadowMargin * 2, height: drawer.height + Self.shadowMargin)
+        let width = max(drawer.width, hudWidth, deviceWingsWidth, deviceCardWidth)
+        let height = max(drawer.height, deviceCardHeight + Self.bottomPadding)
+        return CGSize(width: width + Self.shadowMargin * 2, height: height + Self.shadowMargin)
     }
 
     /// How much each wing grows while it shows a volume or brightness change (Wings HUD).
@@ -255,8 +257,8 @@ struct NotchView: View {
 
     private var isExpanded: Bool { panelState.isExpanded }
 
-    /// Volume, brightness or Focus change to show in the wings, on every screen, but not while the
-    /// drawer is open, since it has its own controls.
+    /// Volume, brightness, Focus or device change to show in the wings (or the device drop card), on
+    /// every screen, but not while the drawer is open, since it has its own controls.
     private func hudEvent(for layout: NotchLayout) -> SystemHUDEvent? {
         guard !isExpanded else { return nil }
         return systemHUD.event
@@ -353,8 +355,10 @@ struct NotchView: View {
         let activeLayout = currentLayout
         let cardWidth = activeLayout.panelSize(expanded: true).width
         let hud = hudEvent(for: activeLayout)
-        let activeSize = activeLayout.panelSize(expanded: isExpanded, hud: hud != nil)
+        let activeSize = activeLayout.panelSize(expanded: isExpanded, hudEvent: hud)
         let matchesBar = notchSettings.notchMatchesBar
+        // A device reporting two or more batteries drops a card below the compact row.
+        let dropCard = hud?.devicePresentation.flatMap { $0.style == .card ? $0 : nil }
 
         ZStack(alignment: .top) {
             if isVisible {
@@ -363,9 +367,10 @@ struct NotchView: View {
                 // The compact row keeps its own width and position when the drawer opens; only the
                 // drawer around it widens when the details need more room.
                 let row = activeLayout
-                let rowWidth = hud != nil ? row.hudWidth : row.contentWidth
+                let rowWidth = hud.map { row.hudRowWidth(for: $0) } ?? row.contentWidth
                 let width = isExpanded ? cardWidth : rowWidth
-                let shape = BottomRoundedRectangle(radius: isExpanded ? 22 : (activeLayout.hasNotch ? 12 : 14))
+                let shape = BottomRoundedRectangle(
+                    radius: isExpanded ? 22 : (dropCard != nil ? 24 : (activeLayout.hasNotch ? 12 : 14)))
                 VStack(spacing: 0) {
                     compactContent(for: row, hud: hud)
                         .frame(width: rowWidth, height: row.barHeight)
@@ -378,6 +383,12 @@ struct NotchView: View {
                         // and read as the row moving.
                         expandedIslandCard(width: cardWidth)
                             .transition(.opacity)
+                    } else if let dropCard {
+                        // Grows down like the drawer, but takes no clicks or hover: the window ignores
+                        // the mouse outside the compact pill (NotchLayout.hoverRect).
+                        DeviceHUDCardBody(presentation: dropCard, width: rowWidth)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
                     }
                 }
                 .frame(width: width, alignment: .top)
@@ -387,8 +398,10 @@ struct NotchView: View {
                 // blends with the camera housing. The bar color needs both to stand off the
                 // wallpaper; the open drawer floats over windows, so it always has a shadow.
                 .overlay(shape.stroke(Color.white.opacity(matchesBar ? 0.12 : 0), lineWidth: 1))
-                .shadow(color: .black.opacity(isExpanded ? 0.8 : (matchesBar ? 0.35 : 0)),
-                        radius: isExpanded ? 24 : 4, y: isExpanded ? 10 : 2)
+                // The drop card hangs over windows too, so it gets a lighter shadow of its own.
+                .shadow(color: .black.opacity(isExpanded ? 0.8 : (dropCard != nil ? 0.45 : (matchesBar ? 0.35 : 0))),
+                        radius: isExpanded ? 24 : (dropCard != nil ? 12 : 4),
+                        y: isExpanded ? 10 : (dropCard != nil ? 6 : 2))
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -401,6 +414,8 @@ struct NotchView: View {
         .animation(.easeInOut(duration: 0.2), value: nowPlaying.isPlaying)
         // The wings spring sideways; the camera gap stays centered, so the row does not move.
         .animation(.spring(response: 0.42, dampingFraction: 0.72), value: hud != nil)
+        // The card drops below the row; the row itself stays put.
+        .animation(.spring(response: 0.42, dampingFraction: 0.8), value: dropCard != nil)
         .onChange(of: isVisible) { visible in
             if !visible { panelState.collapse() }
         }
@@ -445,7 +460,18 @@ struct NotchView: View {
 
     /// HUD wings around the camera gap (zero wide without a camera notch). Fades only: a scale
     /// would shrink the camera gap too. The wings' width springs.
+    @ViewBuilder
     private func hudContent(_ hud: SystemHUDEvent, layout: NotchLayout) -> some View {
+        if case .device(let presentation) = NotchHUDContent(hud) {
+            DeviceHUDRow(presentation: presentation, wingWidth: layout.hudWingWidth(for: hud),
+                         notchWidth: layout.notchWidth, hasNotch: layout.hasNotch)
+                .transition(.opacity)
+        } else {
+            levelOrFocusContent(hud, layout: layout)
+        }
+    }
+
+    private func levelOrFocusContent(_ hud: SystemHUDEvent, layout: NotchLayout) -> some View {
         HStack(spacing: 0) {
             // Next to the camera it centers in its wing; without one it sits at the edge, like the label.
             hudSymbol(hud)
@@ -465,7 +491,7 @@ struct NotchView: View {
     /// Left wing: the Focus glyph, or the speaker or sun.
     @ViewBuilder
     private func hudSymbol(_ event: SystemHUDEvent) -> some View {
-        if event.kind == .focus {
+        if NotchHUDContent(event) == .focus {
             // A new identity per change replays the pop.
             FocusGlyph(event: event)
                 .id(FocusGlyph.Key(event: event))
@@ -477,7 +503,7 @@ struct NotchView: View {
     /// Right wing: the Focus name with On or Off, or the level bar and value.
     @ViewBuilder
     private func hudLevel(_ event: SystemHUDEvent, barWidth: CGFloat) -> some View {
-        if event.kind == .focus {
+        if NotchHUDContent(event) == .focus {
             focusLabel(event)
         } else {
             levelBar(event, barWidth: barWidth)

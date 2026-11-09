@@ -1,11 +1,12 @@
 import Foundation
 
-/// A volume, brightness or Focus change shown in the notch wings for a moment.
+/// A volume, brightness, Focus or device change shown in the notch wings for a moment.
 struct SystemHUDEvent: Equatable {
     enum Kind: Equatable {
         case volume
         case brightness
         case focus
+        case device
     }
 
     let kind: Kind
@@ -15,12 +16,24 @@ struct SystemHUDEvent: Equatable {
     let muted: Bool
     /// The Focus that turned on or off (Focus only).
     var focus: FocusModeDescriptor? = nil
+    /// The device that connected, disconnected or ran low (device only).
+    var device: DeviceEvent? = nil
 
     init(kind: Kind, level: Double, muted: Bool, focus: FocusModeDescriptor? = nil) {
         self.kind = kind
         self.level = level
         self.muted = muted
         self.focus = focus
+    }
+
+    init(device: DeviceEvent) {
+        self.init(kind: .device, level: Double(device.device.lowestLevel ?? 0) / 100, muted: false)
+        self.device = device
+    }
+
+    /// What the wings or the drop card show for a device event.
+    var devicePresentation: DeviceHUDPresentation? {
+        device.map(DeviceHUDPresentation.init)
     }
 
     init(focus: FocusModeDescriptor, isOn: Bool) {
@@ -38,6 +51,7 @@ struct SystemHUDEvent: Equatable {
     /// Number next to the bar, a dash while muted, or On/Off for a Focus.
     var valueText: String {
         if kind == .focus { return isOn ? "On" : "Off" }
+        if let devicePresentation { return devicePresentation.valueText }
         return muted ? "—" : String(Int((barFraction * 100).rounded()))
     }
 
@@ -51,6 +65,8 @@ struct SystemHUDEvent: Equatable {
             return barFraction < 0.5 ? "sun.min.fill" : "sun.max.fill"
         case .focus:
             return (focus ?? .generic).symbolName
+        case .device:
+            return devicePresentation?.symbolName ?? DeviceKind.generic.symbolName
         }
     }
 }
@@ -89,7 +105,8 @@ struct BrightnessChangeDetector {
     }
 }
 
-/// The change currently shown in the notch, cleared shortly after the last one.
+/// The change currently shown in the notch, cleared shortly after the last one. Volume, brightness
+/// and Focus replace whatever shows; device events take turns, each for its own duration.
 @MainActor
 final class SystemHUDState: ObservableObject {
     static let shared = SystemHUDState()
@@ -98,23 +115,57 @@ final class SystemHUDState: ObservableObject {
 
     /// How long the wings stay open after the last change, as in the design.
     private let hideDelay: TimeInterval
+    /// Scales device durations (wings 2 s, card 3 s) and the pause between them; probes shorten it.
+    private let deviceTimeScale: Double
+    /// Pause between queued device events so each one closes before the next opens.
+    private static let deviceGap: TimeInterval = 0.35
     private var hideTimer: Timer?
+    /// Device events waiting for their turn.
+    private var queue: [SystemHUDEvent] = []
     /// Lets a timer that already fired skip clearing a newer event.
     private var generation = 0
 
-    init(hideDelay: TimeInterval = 1.6) {
+    init(hideDelay: TimeInterval = 1.6, deviceTimeScale: Double = 1) {
         self.hideDelay = hideDelay
+        self.deviceTimeScale = deviceTimeScale
+    }
+
+    var queuedCount: Int { queue.count }
+
+    func duration(of event: SystemHUDEvent) -> TimeInterval {
+        event.devicePresentation.map { $0.duration * deviceTimeScale } ?? hideDelay
     }
 
     func show(_ event: SystemHUDEvent) {
+        if event.kind == .device, self.event?.kind == .device || !queue.isEmpty {
+            queue.append(event)
+            return
+        }
+        present(event)
+    }
+
+    private func present(_ event: SystemHUDEvent) {
         self.event = event
+        schedule(after: duration(of: event)) { [weak self] in
+            guard let self else { return }
+            self.event = nil
+            guard !self.queue.isEmpty else { return }
+            self.schedule(after: Self.deviceGap * self.deviceTimeScale) { [weak self] in
+                guard let self, !self.queue.isEmpty else { return }
+                self.present(self.queue.removeFirst())
+            }
+        }
+    }
+
+    /// Runs `action` after the delay unless something newer was shown or scheduled meanwhile.
+    private func schedule(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) {
         generation += 1
         let shown = generation
         hideTimer?.invalidate()
-        let timer = Timer(timeInterval: hideDelay, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.generation == shown else { return }
-                self.event = nil
+                action()
             }
         }
         // Common modes: also fires while a menu is open.

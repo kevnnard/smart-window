@@ -1,0 +1,9 @@
+{
+  "title": "Notch device HUD",
+  "brief": "Notch HUD for any Bluetooth or USB device connecting or disconnecting (AirPods, headsets, mice, keyboards, trackpads, game controllers, unknown devices): device icon by type, name, battery when reported (AirPods Left, Right and Case), an intentional Connected state without battery, gray Disconnected, amber and red low-battery warnings, and charging, on MacBook camera notches and external displays, transient and click-through",
+  "artboards": [
+    { "file": "01-device-wings.html", "title": "Device wings", "tradeoff": "Same wings as volume and Focus, never covers the window; long names wrap to two small lines and AirPods get three short numbers with no per-part bar", "width": 1440, "height": 1800 },
+    { "file": "02-wings-plus-drawer.html", "title": "Wings plus Devices drawer", "tradeoff": "Batteries checkable any time from the hover drawer, low devices first; adds a tab to the 180 pt drawer, depends on how fresh macOS levels are, and needs background tracking", "width": 1440, "height": 3350 },
+    { "file": "03-drop-card.html", "title": "Drop card", "tradeoff": "Clearest read of multi-battery devices with one ring per part; covers the top 100 pt of the window for 3 s and adds a second HUD shape", "width": 1440, "height": 2500 }
+  ]
+}

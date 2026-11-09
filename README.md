@@ -52,6 +52,7 @@ Each one turns on one extra feature. You can skip any of them and grant it later
 | **Automation: Spotify / Music** | Showing and controlling what Spotify and Music play | macOS asks the first time SmartWindow talks to the app |
 | **Full Disk Access** | The **name and icon** of the Focus you turn on or off | Add SmartWindow by hand in System Settings → Privacy & Security → Full Disk Access (macOS has no prompt for this) |
 | **Focus Status** | A generic "Focus on" when Full Disk Access is not granted | macOS asks; or click **Allow…** in Settings → Permissions |
+| **Bluetooth** | The device HUD the moment a Bluetooth device connects or disconnects; without it, some devices take up to a minute | Click **Allow…** in Settings → Permissions |
 
 Why Full Disk Access? macOS keeps the name of the active Focus in a protected folder.
 SmartWindow only reads that Focus information; without it, you still see a generic Focus.
@@ -160,6 +161,31 @@ color.
 Showing the Focus **name** needs [Full Disk Access](#optional-permissions). Without it,
 SmartWindow uses Focus Status and shows a generic **Focus** instead. A Focus turned on
 by a schedule may show only as the generic Focus, and only when Focus Status is allowed.
+
+### Devices connect, disconnect and run low
+
+Connect or disconnect a Bluetooth or USB device (headphones, a mouse, a keyboard, a
+game controller) and the notch shows its name, and its battery when the device reports
+one. Devices with several batteries, like AirPods, get a card with one ring per part.
+
+<table align="center">
+  <tr>
+    <td align="center" colspan="2"><img width="480" alt="Device HUD card under the notch: an AirPods icon, the label Connected, the name Kevnnard's AirPods and three rings, Left 80%, Right 76% and Case 45%" src="docs/images/notch-device-airpods.png" /><br/><sub>AirPods connected</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img width="400" alt="Device HUD on an external monitor: a keyboard icon and the name NuPhy Air75 V2 on the left, a battery at 62% on the right" src="docs/images/notch-device-keyboard.png" /><br/><sub>Keyboard connected</sub></td>
+    <td align="center"><img width="400" alt="Device HUD: a trackpad icon and the name Magic Trackpad on the left, a red battery at 8% and the tag Low on the right" src="docs/images/notch-device-low.png" /><br/><sub>Low battery</sub></td>
+  </tr>
+</table>
+
+Good to know:
+
+- A battery turns orange at 20% and red with **Low** at 10%; each step is shown once.
+- A device that does not report its battery shows **Connected** with no number.
+- Devices already connected when SmartWindow starts are not announced.
+- The device HUD lets every click through, and VoiceOver reads it as one sentence.
+- Which devices report a battery depends on the device. USB devices are covered when
+  they are keyboards, mice, controllers or other input devices.
 
 ### On external monitors too
 

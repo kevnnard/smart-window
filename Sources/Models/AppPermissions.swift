@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 
 /// A macOS permission SmartWindow uses, as listed in Settings → Permissions.
@@ -7,6 +8,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
     case automationMusic
     case fullDiskAccess
     case focusStatus
+    case bluetooth
 
     var id: String { rawValue }
 
@@ -23,6 +25,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .automationMusic: return "Automation: Music"
         case .fullDiskAccess: return "Full Disk Access"
         case .focusStatus: return "Focus Status"
+        case .bluetooth: return "Bluetooth"
         }
     }
 
@@ -38,6 +41,8 @@ enum AppPermission: String, CaseIterable, Identifiable {
             return "Shows which Focus turned on or off. macOS keeps the Focus name in a protected folder."
         case .focusStatus:
             return "Shows that a Focus is on when Full Disk Access is not granted."
+        case .bluetooth:
+            return "Shows the moment any Bluetooth device connects or disconnects. Without it, some devices take up to a minute."
         }
     }
 
@@ -47,6 +52,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .automationSpotify, .automationMusic: return "music.note"
         case .fullDiskAccess: return "externaldrive.fill"
         case .focusStatus: return "moon.fill"
+        case .bluetooth: return "dot.radiowaves.left.and.right"
         }
     }
 
@@ -67,6 +73,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .automationSpotify, .automationMusic: anchor = "Privacy_Automation"
         case .fullDiskAccess: return FocusDatabase.fullDiskAccessSettingsURL
         case .focusStatus: anchor = "Privacy_Focus"
+        case .bluetooth: anchor = "Privacy_Bluetooth"
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
     }
@@ -80,6 +87,16 @@ enum PermissionStatus: Equatable {
     /// Automation can only be checked while the target app is open.
     case appNotRunning
     case unknown
+
+    /// From CBManager.authorization.
+    init(bluetoothAuthorization: CBManagerAuthorization) {
+        switch bluetoothAuthorization {
+        case .allowedAlways: self = .granted
+        case .notDetermined: self = .notDetermined
+        case .denied, .restricted: self = .denied
+        @unknown default: self = .unknown
+        }
+    }
 
     /// From AEDeterminePermissionToAutomateTarget.
     init(automationResult: Int32) {
@@ -96,4 +113,15 @@ enum PermissionStatus: Equatable {
 
     /// macOS shows its prompt only once; after a denial the user changes it in System Settings.
     var canRequestInApp: Bool { self == .notDetermined }
+}
+
+/// Bluetooth permission. Reading or asking for it without the usage description terminates the app,
+/// and a debug build has no Info.plist, so it is unavailable there and the device monitor polls.
+enum BluetoothAccess {
+    static let usageKey = "NSBluetoothAlwaysUsageDescription"
+
+    static func status(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> PermissionStatus {
+        guard infoDictionary?[usageKey] != nil else { return .unknown }
+        return PermissionStatus(bluetoothAuthorization: CBManager.authorization)
+    }
 }

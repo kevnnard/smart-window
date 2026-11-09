@@ -17,6 +17,10 @@ final class NotchController: NSObject, ObservableObject {
     /// Pointer monitors: global while the pointer is over other apps (the notch window then ignores
     /// the mouse), local while it is over the notch.
     private var pointerMonitors: [Any] = []
+    private var deviceAnnouncer = DeviceHUDAnnouncer()
+#if DEBUG
+    private var deviceDebugObserver: NSObjectProtocol?
+#endif
     
     override init() {
         super.init()
@@ -41,6 +45,34 @@ final class NotchController: NSObject, ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshVisibility() }
             .store(in: &cancellables)
+
+        // Announce once globally, not once per display's SwiftUI view.
+        SystemHUDState.shared.$event
+            .sink { [weak self] event in
+                guard let sentence = self?.deviceAnnouncer.sentence(for: event) else { return }
+                DeviceHUDAnnouncer.post(sentence)
+            }
+            .store(in: &cancellables)
+        // Every HUD change (also device → volume) can change the hover area. @Published emits in
+        // willSet, so read the new value on the next run loop turn.
+        SystemHUDState.shared.$event
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.refreshHoverAreas() }
+            }
+            .store(in: &cancellables)
+#if DEBUG
+        deviceDebugObserver = DistributedNotificationCenter.default().addObserver(
+            forName: DeviceHUDDebugSamples.notification, object: nil, queue: .main
+        ) { notification in
+            let name = notification.object as? String ?? "airpods"
+            Task { @MainActor in
+                for event in DeviceHUDDebugSamples.events(named: name) {
+                    SystemHUDState.shared.show(event)
+                }
+            }
+        }
+#endif
 
         // A volume or brightness change shows the notch even when nothing is playing. Hover keeps
         // the compact area, so the wider wings do not open the drawer under a resting pointer.
@@ -116,6 +148,13 @@ final class NotchController: NSObject, ObservableObject {
             return event
         }) {
             pointerMonitors.append(local)
+        }
+        updatePointer()
+    }
+
+    private func refreshHoverAreas() {
+        for panel in panels.values {
+            (panel.contentView as? NotchHostingView<NotchView>)?.refreshHoverArea()
         }
         updatePointer()
     }
@@ -252,7 +291,9 @@ final class NotchController: NSObject, ObservableObject {
             ),
             panelState: state,
             hoverRect: { [weak state] in
-                NotchLayout.forScreen(screen).visibleRect(expanded: state?.isExpanded ?? false)
+                // A device HUD is a notification: every pixel of it lets clicks through.
+                NotchLayout.forScreen(screen).hoverRect(expanded: state?.isExpanded ?? false,
+                                                        hudEvent: SystemHUDState.shared.event)
             }
         )
         panelStates[displayID] = state

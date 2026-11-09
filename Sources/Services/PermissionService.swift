@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreBluetooth
 import Intents
 
 /// Reads and requests the permissions listed in Settings → Permissions.
@@ -8,6 +9,8 @@ final class PermissionService: ObservableObject {
     static let shared = PermissionService()
 
     @Published private(set) var statuses: [AppPermission: PermissionStatus] = [:]
+    /// Creating a central manager shows the Bluetooth prompt; kept alive until it is answered.
+    private var bluetoothPrompt: BluetoothPrompt?
 
     private init() {
         refresh()
@@ -26,6 +29,7 @@ final class PermissionService: ObservableObject {
         statuses[.accessibility] = AXIsProcessTrusted() ? .granted : .denied
         statuses[.fullDiskAccess] = FocusDatabase.canRead() ? .granted : .denied
         statuses[.focusStatus] = focusStatus()
+        statuses[.bluetooth] = BluetoothAccess.status()
         for permission in AppPermission.allCases {
             guard let target = permission.automationTarget else { continue }
             Task.detached {
@@ -45,6 +49,11 @@ final class PermissionService: ObservableObject {
         case .focusStatus where status(of: permission).canRequestInApp:
             INFocusStatusCenter.default.requestAuthorization { _ in
                 Task { @MainActor in self.refresh() }
+            }
+        case .bluetooth where status(of: permission).canRequestInApp:
+            bluetoothPrompt = BluetoothPrompt { [weak self] in
+                self?.bluetoothPrompt = nil
+                self?.refresh()
             }
         case .automationSpotify, .automationMusic:
             guard let target = permission.automationTarget, status(of: permission).canRequestInApp else {
@@ -87,5 +96,22 @@ final class PermissionService: ObservableObject {
         let result = AEDeterminePermissionToAutomateTarget(&target, AEEventClass(typeWildCard),
                                                            AEEventID(typeWildCard), ask)
         return PermissionStatus(automationResult: result)
+    }
+}
+
+/// Shows the macOS Bluetooth prompt and reports once it is answered.
+private final class BluetoothPrompt: NSObject, CBCentralManagerDelegate {
+    private var manager: CBCentralManager?
+    private let answered: @MainActor () -> Void
+
+    init(answered: @escaping @MainActor () -> Void) {
+        self.answered = answered
+        super.init()
+        manager = CBCentralManager(delegate: self, queue: .main)
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard CBManager.authorization != .notDetermined else { return }
+        Task { @MainActor in self.answered() }
     }
 }

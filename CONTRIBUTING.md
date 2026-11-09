@@ -139,7 +139,7 @@ swiftc Sources/Models/FocusMode.swift Sources/Models/DisplayPreferences.swift Te
 ```
 
 `Tests/Probes/` also holds probes for the notch (hover, settings, system HUD, Focus
-HUD), per-display settings and scope, permissions, media sessions and the adapter,
+HUD, device HUD and monitor), per-display settings and scope, permissions, media sessions and the adapter,
 status scrolling, and the release script. Each one is a standalone file; compile it
 with `swiftc` together with the `Sources/` files it uses, as in the commands above.
 The release script runs every `Tests/Probes/*.py` probe.
