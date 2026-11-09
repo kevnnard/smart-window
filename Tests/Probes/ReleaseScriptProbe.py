@@ -22,6 +22,8 @@ CASK_9_9_9 = f'''cask "smartwindow" do
   desc "Polybar-style macOS top bar with numbered window tabs"
   homepage "https://github.com/kevnnard/smart-window"
 
+  auto_updates true
+
   app "SmartWindow.app"
 
   zap trash: [

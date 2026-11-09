@@ -138,10 +138,60 @@ private struct PaneIcon: View {
 
 // MARK: - General
 
+/// The update state and its one action: check, or update to the new version.
+private struct UpdateStatusRow: View {
+    @ObservedObject var updates: UpdateService
+
+    var body: some View {
+        HStack(spacing: 10) {
+            status
+            Spacer(minLength: 12)
+            switch updates.state {
+            case .available(let release):
+                Button("Update to v\(release.version.description)") { updates.install(release) }
+                    .buttonStyle(.borderedProminent)
+            case .checking, .installing:
+                ProgressView().controlSize(.small)
+            default:
+                Button("Check Now") { updates.check() }
+            }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        switch updates.state {
+        case .idle:
+            Text(lastChecked)
+        case .checking:
+            Text("Checking for updates…")
+        case .upToDate:
+            Label("SmartWindow is up to date", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        case .available(let release):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Version \(release.version.description) is available", systemImage: "arrow.down.circle.fill")
+                    .foregroundStyle(.blue)
+                Link("What's new", destination: release.pageURL).font(.caption)
+            }
+        case .installing(let release):
+            Text("Installing v\(release.version.description)… SmartWindow reopens when it is done.")
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var lastChecked: String {
+        guard let date = updates.lastCheck else { return "Not checked yet" }
+        return "Last checked " + date.formatted(.relative(presentation: .named))
+    }
+}
+
 private struct GeneralPane: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var login = LoginItemService.shared
     @ObservedObject private var focusMode = FocusMode.shared
+    @ObservedObject private var updates = UpdateService.shared
 
     var body: some View {
         Form {
@@ -190,6 +240,12 @@ private struct GeneralPane: View {
 
             Section {
                 LabeledContent("Version", value: SettingsView.versionString)
+                if let reason = updates.unsupportedReason {
+                    Text(reason).foregroundStyle(.secondary)
+                } else {
+                    Toggle("Check for updates automatically", isOn: $updates.checksAutomatically)
+                    UpdateStatusRow(updates: updates)
+                }
             } header: {
                 Text("About")
             } footer: {

@@ -67,6 +67,7 @@ final class SmartWindowDelegate: NSObject, NSApplicationDelegate, ObservableObje
         focusStatus.start()
         deviceMonitor.start()
         callMonitor.start()
+        UpdateService.shared.start()
 
         windowManager.$fullscreenScreenFrame
             .removeDuplicates()
