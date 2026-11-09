@@ -18,6 +18,7 @@ final class NotchController: NSObject, ObservableObject {
     /// the mouse), local while it is over the notch.
     private var pointerMonitors: [Any] = []
     private var deviceAnnouncer = DeviceHUDAnnouncer()
+    private var callAnnouncer = CallHUDAnnouncer()
 #if DEBUG
     private var deviceDebugObserver: NSObjectProtocol?
 #endif
@@ -59,6 +60,20 @@ final class NotchController: NSObject, ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self?.refreshHoverAreas() }
+            }
+            .store(in: &cancellables)
+        // A call shows the notch even when nothing is playing, and its wings and card change the
+        // hover area. objectWillChange fires before the change, so read it on the next turn.
+        CallHUDState.shared.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if let sentence = self.callAnnouncer.sentence(for: CallHUDState.shared.presentation) {
+                        DeviceHUDAnnouncer.post(sentence)
+                    }
+                    self.refreshVisibility()
+                    self.refreshHoverAreas()
+                }
             }
             .store(in: &cancellables)
 #if DEBUG
@@ -119,7 +134,7 @@ final class NotchController: NSObject, ObservableObject {
 
             // Show notch and show when nothing is playing of this display: its own values, else Default.
             let notch = DisplayPreferences.shared.effectiveSettings(for: DisplayIdentity.key(for: screen))
-            let showsHUD = SystemHUDState.shared.event != nil
+            let showsHUD = SystemHUDState.shared.event != nil || CallHUDState.shared.isActive
             let shouldShow = isVisible && notch.showNotch
                 && (notch.showWhenIdle || nowPlayingService.hasPlayer || showsHUD)
 
@@ -293,7 +308,9 @@ final class NotchController: NSObject, ObservableObject {
             hoverRect: { [weak state] in
                 // A device HUD is a notification: every pixel of it lets clicks through.
                 NotchLayout.forScreen(screen).hoverRect(expanded: state?.isExpanded ?? false,
-                                                        hudEvent: SystemHUDState.shared.event)
+                                                        hudEvent: SystemHUDState.shared.event,
+                                                        call: CallHUDState.shared.presentation,
+                                                        startCard: CallHUDState.shared.startCardVisible)
             }
         )
         panelStates[displayID] = state

@@ -53,6 +53,7 @@ Each one turns on one extra feature. You can skip any of them and grant it later
 | **Full Disk Access** | The **name and icon** of the Focus you turn on or off | Add SmartWindow by hand in System Settings → Privacy & Security → Full Disk Access (macOS has no prompt for this) |
 | **Focus Status** | A generic "Focus on" when Full Disk Access is not granted | macOS asks; or click **Allow…** in Settings → Permissions |
 | **Bluetooth** | The device HUD the moment a Bluetooth device connects or disconnects; without it, some devices take up to a minute | Click **Allow…** in Settings → Permissions |
+| **Microphone** | A call waveform that follows your voice; without it the waveform just pulses. SmartWindow listens only while a call is on (stopping about two seconds after it ends) and only measures how loud you are: it keeps no audio and sends none | Click **Allow…** in Settings → Permissions |
 
 Why Full Disk Access? macOS keeps the name of the active Focus in a protected folder.
 SmartWindow only reads that Focus information; without it, you still see a generic Focus.
@@ -186,6 +187,43 @@ Good to know:
 - The device HUD lets every click through, and VoiceOver reads it as one sentence.
 - Which devices report a battery depends on the device. USB devices are covered when
   they are keyboards, mice, controllers or other input devices.
+
+### Calls
+
+Join a call and the notch shows it: a card drops with the app, a waveform and the time,
+then folds into wings around the camera, with the app on the left and a green timer on
+the right. Point at the notch to bring the card back. When you hang up, the card shows
+**Call ended** and the total for a moment, then your music comes back.
+
+<table align="center">
+  <tr>
+    <td align="center" colspan="2"><img width="480" alt="Call card under the notch: a Zoom badge on the left, 04:27 on the right, the title Zoom · Call, a green waveform and a large green 04:27" src="docs/images/notch-call-card.png" /><br/><sub>Call started, or pointer on the notch</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img width="400" alt="Call wings: a Zoom badge and a small green waveform on the left of the camera, a green 04:27 on the right" src="docs/images/notch-call-wings.png" /><br/><sub>During the call</sub></td>
+    <td align="center"><img width="400" alt="Call ended card: a red hang-up badge, the word Ended in red, the title Zoom · Call ended and the total 01:00" src="docs/images/notch-call-ended.png" /><br/><sub>Call ended</sub></td>
+  </tr>
+</table>
+
+Good to know:
+
+- A call is a call app using the microphone: FaceTime (and iPhone calls on the Mac),
+  Zoom, Teams, WhatsApp, Discord, Slack, Webex, Skype, Telegram, Signal, and browsers
+  (Chrome, Safari, Arc, Dia, Firefox, Edge, Brave) for Meet and other web calls. Other apps
+  using the microphone, like dictation or Voice Memos, are not calls. A browser recording
+  audio for something else also counts as a call.
+- Each app shows its own icon, taken from the installed app. A web service shows the icon of its
+  Mac app when you have it installed (Zoom, Teams…); otherwise, and for Meet, a colored badge.
+- A call in a browser is named after the service in the browser window title (Google Meet, Teams,
+  Zoom, Webex, WhatsApp, Slack, Discord, Jitsi Meet), with a small browser mark; this uses the
+  Accessibility permission. It is a best guess from the titles: only the active tab of each window
+  is in its title, so a call in a background tab shows the browser until you look at that tab once,
+  and another window showing one of those services can name the call after it.
+- The waveform follows your voice only with the optional **Microphone** permission. While it
+  listens, macOS also lists SmartWindow as using the microphone.
+- Incoming calls (ringing) are not shown, only calls you are in.
+- Volume, brightness, Focus and device changes still show over the call.
+- Needs macOS 14 or later; on macOS 13 there is no call HUD.
 
 ### On external monitors too
 

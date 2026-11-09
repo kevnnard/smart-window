@@ -77,8 +77,8 @@ struct NotchLayout: Equatable {
     /// (NotchHostingView.updatePointer), so clicks reach the window below.
     var windowSize: CGSize {
         let drawer = panelSize(expanded: true)
-        let width = max(drawer.width, hudWidth, deviceWingsWidth, deviceCardWidth)
-        let height = max(drawer.height, deviceCardHeight + Self.bottomPadding)
+        let width = max(drawer.width, hudWidth, deviceWingsWidth, deviceCardWidth, callCardWidth)
+        let height = max(drawer.height, deviceCardHeight + Self.bottomPadding, callCardHeight + Self.bottomPadding)
         return CGSize(width: width + Self.shadowMargin * 2, height: height + Self.shadowMargin)
     }
 
@@ -251,6 +251,7 @@ struct NotchView: View {
     @ObservedObject var panelState: NotchPanelState
     @ObservedObject private var displayPreferences = DisplayPreferences.shared
     @ObservedObject private var systemHUD = SystemHUDState.shared
+    @ObservedObject private var callHUD = CallHUDState.shared
     static let sourcePillWidth: CGFloat = 60
     static let sourcePillHeight: CGFloat = 20
     static let maxVisibleSources = 3
@@ -259,8 +260,9 @@ struct NotchView: View {
 
     /// Volume, brightness, Focus or device change to show in the wings (or the device drop card), on
     /// every screen, but not while the drawer is open, since it has its own controls.
+    /// During a call the drawer never opens, so the HUD also shows over the hovered call card.
     private func hudEvent(for layout: NotchLayout) -> SystemHUDEvent? {
-        guard !isExpanded else { return nil }
+        guard !isExpanded || callHUD.isActive else { return nil }
         return systemHUD.event
     }
 
@@ -316,7 +318,7 @@ struct NotchView: View {
         let displayAllowed = notch.showNotch
         // A volume or brightness change shows the notch even when nothing is playing. This ignores
         // the drawer state on purpose: opening the drawer over the HUD must not hide the notch.
-        if systemHUD.event != nil {
+        if systemHUD.event != nil || callHUD.isActive {
             return displayAllowed
         }
         if notch.showWhenIdle {
@@ -355,10 +357,22 @@ struct NotchView: View {
         let activeLayout = currentLayout
         let cardWidth = activeLayout.panelSize(expanded: true).width
         let hud = hudEvent(for: activeLayout)
-        let activeSize = activeLayout.panelSize(expanded: isExpanded, hudEvent: hud)
+        // During a call, hover opens the call card instead of the drawer.
+        let callMode = NotchCallMode(call: callHUD.presentation, hudEvent: systemHUD.event,
+                                     expanded: isExpanded, startCard: callHUD.startCardVisible)
+        let call = callMode == .none ? nil : callHUD.presentation
+        // During a call, hover opens the call card (or a HUD shows), never the media drawer.
+        let showsDrawer = isExpanded && !callHUD.isActive
+        let callCard = callMode == .card ? call : nil
+        let activeSize = call == nil
+            ? activeLayout.panelSize(expanded: showsDrawer, hudEvent: hud)
+            : CGSize(width: activeLayout.callRowWidth(for: callMode),
+                     height: (callCard != nil ? activeLayout.callCardHeight : activeLayout.barHeight)
+                        + NotchLayout.bottomPadding)
         let matchesBar = notchSettings.notchMatchesBar
         // A device reporting two or more batteries drops a card below the compact row.
         let dropCard = hud?.devicePresentation.flatMap { $0.style == .card ? $0 : nil }
+        let hangsCard = dropCard != nil || callCard != nil
 
         ZStack(alignment: .top) {
             if isVisible {
@@ -367,21 +381,26 @@ struct NotchView: View {
                 // The compact row keeps its own width and position when the drawer opens; only the
                 // drawer around it widens when the details need more room.
                 let row = activeLayout
-                let rowWidth = hud.map { row.hudRowWidth(for: $0) } ?? row.contentWidth
-                let width = isExpanded ? cardWidth : rowWidth
+                let rowWidth = call != nil ? row.callRowWidth(for: callMode)
+                    : (hud.map { row.hudRowWidth(for: $0) } ?? row.contentWidth)
+                let width = showsDrawer ? cardWidth : rowWidth
                 let shape = BottomRoundedRectangle(
-                    radius: isExpanded ? 22 : (dropCard != nil ? 24 : (activeLayout.hasNotch ? 12 : 14)))
+                    radius: showsDrawer ? 22 : (hangsCard ? 24 : (activeLayout.hasNotch ? 12 : 14)))
                 VStack(spacing: 0) {
-                    compactContent(for: row, hud: hud)
+                    compactContent(for: row, hud: hud, call: call, callMode: callMode)
                         .frame(width: rowWidth, height: row.barHeight)
                         .frame(width: width)
                         .contentShape(Rectangle())
                         // Hover is tracked by the panel's hosting view (NotchController); a click also expands.
                         .onTapGesture { panelState.expand() }
-                    if isExpanded {
+                    if showsDrawer {
                         // Fades in place: a slide from the top would pass behind the compact row
                         // and read as the row moving.
                         expandedIslandCard(width: cardWidth)
+                            .transition(.opacity)
+                    } else if let callCard {
+                        CallHUDCardBody(presentation: callCard, width: rowWidth)
+                            .allowsHitTesting(false)
                             .transition(.opacity)
                     } else if let dropCard {
                         // Grows down like the drawer, but takes no clicks or hover: the window ignores
@@ -399,9 +418,9 @@ struct NotchView: View {
                 // wallpaper; the open drawer floats over windows, so it always has a shadow.
                 .overlay(shape.stroke(Color.white.opacity(matchesBar ? 0.12 : 0), lineWidth: 1))
                 // The drop card hangs over windows too, so it gets a lighter shadow of its own.
-                .shadow(color: .black.opacity(isExpanded ? 0.8 : (dropCard != nil ? 0.45 : (matchesBar ? 0.35 : 0))),
-                        radius: isExpanded ? 24 : (dropCard != nil ? 12 : 4),
-                        y: isExpanded ? 10 : (dropCard != nil ? 6 : 2))
+                .shadow(color: .black.opacity(showsDrawer ? 0.8 : (hangsCard ? 0.45 : (matchesBar ? 0.35 : 0))),
+                        radius: showsDrawer ? 24 : (hangsCard ? 12 : 4),
+                        y: showsDrawer ? 10 : (hangsCard ? 6 : 2))
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -416,6 +435,8 @@ struct NotchView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.72), value: hud != nil)
         // The card drops below the row; the row itself stays put.
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: dropCard != nil)
+        // The call wings and card spring like the device HUD; the camera gap stays centered.
+        .animation(.spring(response: 0.46, dampingFraction: 0.78), value: callMode)
         .onChange(of: isVisible) { visible in
             if !visible { panelState.collapse() }
         }
@@ -424,8 +445,14 @@ struct NotchView: View {
     // MARK: - Compact Content
 
     @ViewBuilder
-    private func compactContent(for activeLayout: NotchLayout, hud: SystemHUDEvent?) -> some View {
-        if let hud {
+    private func compactContent(for activeLayout: NotchLayout, hud: SystemHUDEvent?,
+                                call: CallHUDPresentation?, callMode: NotchCallMode) -> some View {
+        if let call {
+            // The call replaces the music wings while it lasts.
+            CallHUDRow(presentation: call, mode: callMode, wingWidth: activeLayout.callWingWidth(for: callMode),
+                       notchWidth: activeLayout.notchWidth)
+                .transition(.opacity)
+        } else if let hud {
             hudContent(hud, layout: activeLayout)
         } else if activeLayout.hasNotch {
             if nowPlaying.hasPlayer {

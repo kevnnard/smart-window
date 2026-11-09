@@ -37,6 +37,8 @@
 	<string>SmartWindow shows in the notch when a Bluetooth device connects, disconnects or runs low on battery.</string>
 	<key>NSFocusStatusUsageDescription</key>
 	<string>SmartWindow shows in the notch when a Focus turns on or off.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SmartWindow measures your microphone level while a call is on, to move the waveform in the notch. It keeps no audio and sends none.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

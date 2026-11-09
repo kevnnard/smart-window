@@ -9,6 +9,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
     case fullDiskAccess
     case focusStatus
     case bluetooth
+    case microphone
 
     var id: String { rawValue }
 
@@ -26,6 +27,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .fullDiskAccess: return "Full Disk Access"
         case .focusStatus: return "Focus Status"
         case .bluetooth: return "Bluetooth"
+        case .microphone: return "Microphone"
         }
     }
 
@@ -43,6 +45,8 @@ enum AppPermission: String, CaseIterable, Identifiable {
             return "Shows that a Focus is on when Full Disk Access is not granted."
         case .bluetooth:
             return "Shows the moment any Bluetooth device connects or disconnects. Without it, some devices take up to a minute."
+        case .microphone:
+            return "Moves the call waveform with your voice. Only listens during a call; without it the waveform just pulses."
         }
     }
 
@@ -53,6 +57,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .fullDiskAccess: return "externaldrive.fill"
         case .focusStatus: return "moon.fill"
         case .bluetooth: return "dot.radiowaves.left.and.right"
+        case .microphone: return "mic.fill"
         }
     }
 
@@ -74,6 +79,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         case .fullDiskAccess: return FocusDatabase.fullDiskAccessSettingsURL
         case .focusStatus: anchor = "Privacy_Focus"
         case .bluetooth: anchor = "Privacy_Bluetooth"
+        case .microphone: anchor = "Privacy_Microphone"
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
     }

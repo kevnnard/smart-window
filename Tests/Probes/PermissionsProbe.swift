@@ -12,10 +12,10 @@ struct PermissionsProbe {
 
     static func main() {
         check(AppPermission.allCases == [.accessibility, .automationSpotify, .automationMusic, .fullDiskAccess, .focusStatus,
-                                        .bluetooth],
+                                        .bluetooth, .microphone],
               "lists every permission the app uses, required first")
         check(AppPermission.allCases.filter(\.isRequired) == [.accessibility], "only Accessibility is required")
-        check(AppPermission.required == [.accessibility] && AppPermission.optional.count == 5, "grouped by requirement")
+        check(AppPermission.required == [.accessibility] && AppPermission.optional.count == 6, "grouped by requirement")
 
         let prefix = "x-apple.systempreferences:com.apple.preference.security?"
         check(AppPermission.accessibility.settingsURL.absoluteString == prefix + "Privacy_Accessibility", "Accessibility pane")
@@ -24,6 +24,8 @@ struct PermissionsProbe {
         check(AppPermission.fullDiskAccess.settingsURL == FocusDatabase.fullDiskAccessSettingsURL, "Full Disk Access pane")
         check(AppPermission.focusStatus.settingsURL.absoluteString == prefix + "Privacy_Focus", "Focus pane")
         check(AppPermission.bluetooth.settingsURL.absoluteString == prefix + "Privacy_Bluetooth", "Bluetooth pane")
+        check(AppPermission.microphone.settingsURL.absoluteString == prefix + "Privacy_Microphone", "Microphone pane")
+        check(AppPermission.microphone.purpose.contains("call"), "Microphone explains the call waveform")
         check(AppPermission.automationSpotify.automationTarget == "com.spotify.client", "Spotify bundle")
         check(AppPermission.automationMusic.automationTarget == "com.apple.Music", "Music bundle")
         check(AppPermission.accessibility.automationTarget == nil, "no target for other permissions")
