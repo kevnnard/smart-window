@@ -378,6 +378,16 @@ Below the map, three tabs hold the settings:
   </tr>
 </table>
 
+### Updates
+
+SmartWindow looks for a new version when it starts and once a day. When there is one, Settings →
+General shows **Update to vX** and the menu bar menu shows it too. One click downloads it,
+checks that it is signed by the SmartWindow developer and notarized by Apple, replaces the app and
+reopens it. It never updates without your click; turn off **Check for updates automatically** to
+check only with **Check Now**. A download that fails a check is deleted and nothing changes.
+Since v0.8.0 the Homebrew cask says the app updates itself, so `brew upgrade` leaves it alone. Development builds do
+not update themselves.
+
 ### App settings
 
 | Page | What's there |

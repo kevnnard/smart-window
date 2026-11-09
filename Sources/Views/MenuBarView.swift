@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var windowManager: WindowManager
     @EnvironmentObject var overlayController: OverlayPanelController
+    @ObservedObject private var updates = UpdateService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -116,6 +117,12 @@ struct MenuBarView: View {
     private var appSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionLabel("App")
+
+            if let release = updates.available {
+                menuButton(icon: "arrow.down.circle.fill", title: "Update to v\(release.version.description)", tint: .blue) {
+                    updates.install(release)
+                }
+            }
 
             menuButton(icon: "power", title: "Quit SmartWindow", tint: .red) {
                 NSApplication.shared.terminate(nil)
