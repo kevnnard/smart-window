@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import ApplicationServices
 import CoreBluetooth
@@ -30,6 +31,7 @@ final class PermissionService: ObservableObject {
         statuses[.fullDiskAccess] = FocusDatabase.canRead() ? .granted : .denied
         statuses[.focusStatus] = focusStatus()
         statuses[.bluetooth] = BluetoothAccess.status()
+        statuses[.microphone] = MicrophoneAccess.status()
         for permission in AppPermission.allCases {
             guard let target = permission.automationTarget else { continue }
             Task.detached {
@@ -54,6 +56,10 @@ final class PermissionService: ObservableObject {
             bluetoothPrompt = BluetoothPrompt { [weak self] in
                 self?.bluetoothPrompt = nil
                 self?.refresh()
+            }
+        case .microphone where status(of: permission).canRequestInApp && MicrophoneAccess.canAsk:
+            AVCaptureDevice.requestAccess(for: .audio) { _ in
+                Task { @MainActor in self.refresh() }
             }
         case .automationSpotify, .automationMusic:
             guard let target = permission.automationTarget, status(of: permission).canRequestInApp else {
