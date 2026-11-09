@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.6.0</string>
+	<string>0.7.0</string>
 	<key>CFBundleVersion</key>
-	<string>12</string>
+	<string>13</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -37,9 +37,9 @@
 	<string>SmartWindow shows in the notch when a Bluetooth device connects, disconnects or runs low on battery.</string>
 	<key>NSFocusStatusUsageDescription</key>
 	<string>SmartWindow shows in the notch when a Focus turns on or off.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>SmartWindow measures your microphone level while a call is on, to move the waveform in the notch. It keeps no audio and sends none.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SmartWindow measures your microphone level while a call is on, to move the waveform in the notch. It keeps no audio and sends none.</string>
 </dict>
 </plist>
