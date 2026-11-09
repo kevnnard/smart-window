@@ -27,10 +27,10 @@ REGLAS DEL ARGUMENTO:
 CONVENCIONES DEL PROYECTO:
 - La app se distribuye fuera de la App Store
 - El release debe salir firmado y notarizado cuando exista `scripts/release-env.sh`
-- Si existe `scripts/release-env.sh`, debes ejecutarlo con `source scripts/release-env.sh` antes del release
-- El script mecanico del release es `./scripts/release-homebrew.sh`
-- El release debe actualizar:
-  - `Resources/Info.plist`
+- `./scripts/release.sh` carga `scripts/release-env.sh` por su cuenta y se detiene si faltan `SMARTWINDOW_CODESIGN_IDENTITY` o `SMARTWINDOW_NOTARY_PROFILE`
+- El script mecanico del release es `./scripts/release.sh [--dry-run] X.Y.Z`: corre tests y probes, sube `CFBundleShortVersionString`/`CFBundleVersion` en `Resources/Info.plist` con commit `chore(release): vX.Y.Z`, construye, firma y notariza el zip, crea la tag, publica el GitHub release y actualiza el cask del tap
+- Las notas del release van en `Resources/ReleaseNotes-X.Y.Z.md`; si no existe, el script usa `--generate-notes`
+- Antes del release, actualizar a mano solo si tienen referencias de version publica:
   - `Sources/Views/SettingsView.swift`
   - `README.md` cuando tenga referencias de version publica
 
@@ -45,9 +45,9 @@ ANALISIS OBLIGATORIO ANTES DE DECIDIR EL RELEASE:
 
 TAREAS OBLIGATORIAS:
 1. Normalizar la version objetivo.
-2. Si hay referencias de version anterior en `Resources/Info.plist`, `Sources/Views/SettingsView.swift` o `README.md`, actualizarlas a la nueva version.
+2. Si hay referencias de version anterior en `Sources/Views/SettingsView.swift` o `README.md`, actualizarlas a la nueva version. No toques `Resources/Info.plist`: el script lo sube.
 3. Si hay cambios sin commit relacionados con el release, crear un commit apropiado antes de publicar.
-4. Generar `release_notes` en texto rico con esta estructura exacta:
+4. Generar `release_notes` en texto rico en `Resources/ReleaseNotes-<version>.md` (y commitearlo) con esta estructura exacta:
 
 SmartWindow vX.Y.Z
 <parrafo corto de contexto>
@@ -74,7 +74,7 @@ brew upgrade --cask smartwindow
 
 <cierre corto>
 
-5. Ejecutar el release con el script, pasando esas notas completas.
+5. Ejecutar `./scripts/release.sh --dry-run <version>`, revisar el plan, y luego `./scripts/release.sh <version>` con el arbol de trabajo limpio.
 6. Verificar:
    - `gh release view v<version> --json tagName,url,body,assets`
    - `brew update && brew info --cask kevnnard/tap/smartwindow`
@@ -86,7 +86,7 @@ REGLAS DE COMMIT Y RELEASE:
 - No hagas amend.
 - No hagas push manual extra fuera del flujo del script salvo que sea necesario para el commit previo.
 - No publiques si el repo queda en estado inconsistente o si falta la version.
-- Si falta `scripts/release-env.sh`, continua igual, pero advierte que el release puede salir sin firma/notarizacion si el entorno no esta exportado.
+- Si falta `scripts/release-env.sh` y el entorno de firma no esta exportado, el script se detiene: avisa y no publiques sin firma/notarizacion.
 
 FORMATO DE SALIDA FINAL:
 1. `version_released`: version final publicada

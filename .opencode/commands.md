@@ -19,5 +19,6 @@ El comando `/release` debe:
 - crear commit(s) pendientes del release
 - redactar notas de release con formato rico
 - cargar `scripts/release-env.sh` si existe
-- ejecutar `./scripts/release-homebrew.sh`
+- escribir las notas en `Resources/ReleaseNotes-X.Y.Z.md` y commitearlas
+- ejecutar `./scripts/release.sh --dry-run X.Y.Z` y luego `./scripts/release.sh X.Y.Z`
 - verificar GitHub release y Homebrew cask

@@ -386,16 +386,36 @@ SmartWindow/
 <details>
 <summary><strong>Maintainer release workflow</strong></summary>
 
-Publishing is separate from building or installing locally. From a **clean working
-tree**, the release helper builds the ZIP, publishes a GitHub release, and commits
-and pushes the Homebrew cask update. It expects a sibling `../homebrew-tap` repository.
+Publishing is separate from building or installing locally. `scripts/release.sh`
+cuts a release from `main` with no tracked changes and expects a sibling
+`../homebrew-tap` checkout (override with `TAP_DIR`). Preview the plan first, then
+release:
 
 ```bash
-# Replace the version and notes with the intended release.
-./scripts/release-homebrew.sh 0.2.0 "Release notes here"
+./scripts/release.sh --dry-run 0.5.0   # runs the checks and tests, changes nothing
+./scripts/release.sh 0.5.0
 ```
 
-For signed, notarized releases, set your own identity and profile:
+In order, it:
+
+1. Checks the branch, tracked changes, that `v0.5.0` does not exist locally or on
+   `origin`, the tap checkout, the signing environment, and `gh auth`.
+2. Runs `swift build -c release` and every `Tests/Probes/*.py` probe.
+3. Sets `CFBundleShortVersionString` to `0.5.0`, bumps `CFBundleVersion` in
+   `Resources/Info.plist`, and commits `chore(release): v0.5.0`.
+4. Builds, signs, and notarizes `SmartWindow.zip` in a temporary directory, so the
+   tracked `SmartWindow.zip` is never modified.
+5. Tags `v0.5.0`, pushes `main` and the tag, and creates the GitHub release with
+   the zip attached.
+6. Rewrites `Casks/smartwindow.rb` in the tap with the new version and checksum,
+   then commits and pushes the tap.
+
+Release notes come from `Resources/ReleaseNotes-0.5.0.md` when that file exists;
+otherwise GitHub generates them. Commit the notes before releasing.
+
+Signing and notarization are required. The script sources `scripts/release-env.sh`
+when it exists; copy `scripts/release-env.example.sh` to create it, or export the
+variables yourself:
 
 ```bash
 export SMARTWINDOW_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
@@ -411,11 +431,6 @@ xcrun notarytool store-credentials "smartwindow-notary" \
   --password "app-specific-password"
 ```
 
-The helper signs when `SMARTWINDOW_CODESIGN_IDENTITY` is set, notarizes and staples
-when `SMARTWINDOW_NOTARY_PROFILE` is set, computes the ZIP checksum, pushes this
-repository, creates or updates the release tag, and updates `kevnnard/homebrew-tap`.
-
-Use `scripts/release-env.example.sh` as a template for local signing configuration.
 The same signing identity variable also applies to `scripts/install-app.sh`.
 
 </details>

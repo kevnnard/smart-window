@@ -4,8 +4,9 @@ set -euo pipefail
 APP_NAME="SmartWindow"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/$APP_NAME.app"
-ZIP_PATH="$ROOT_DIR/${APP_NAME}.zip"
-NOTARY_ZIP_PATH="$ROOT_DIR/${APP_NAME}-notary.zip"
+# scripts/release.sh points this at a scratch directory so the tracked zip never changes.
+ZIP_PATH="${SMARTWINDOW_ZIP_PATH:-$ROOT_DIR/${APP_NAME}.zip}"
+NOTARY_ZIP_PATH="$(dirname "$ZIP_PATH")/${APP_NAME}-notary.zip"
 NOTARY_PROFILE="${SMARTWINDOW_NOTARY_PROFILE:-}"
 
 require_cmd() {
