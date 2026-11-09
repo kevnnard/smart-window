@@ -2,55 +2,40 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Bundle Info -->
-    <key>CFBundleName</key>
-    <string>SmartWindow</string>
-    <key>CFBundleDisplayName</key>
-    <string>SmartWindow</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.kevnnard.smartwindow</string>
-    <key>CFBundleVersion</key>
-    <string>10</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.4.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>SmartWindow</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    
-    <!-- macOS Requirements -->
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.utilities</string>
-    
-    <!-- App should run as agent (no Dock icon by default) -->
-    <key>LSUIElement</key>
-    <true/>
-    
-    <!-- Accessibility Permission Description -->
-    <key>NSAccessibilityUsageDescription</key>
-    <string>SmartWindow needs Accessibility access to detect and manage your open windows, read window titles, and switch between them.</string>
-    
-    <!-- Apple Events (AppleScript to Spotify / Music for Now Playing) -->
-    <key>NSAppleEventsUsageDescription</key>
-    <string>SmartWindow asks Spotify and Music what is playing to show the current track in the notch.</string>
-
-    <!-- Focus status (notch Focus HUD without Full Disk Access) -->
-    <key>NSFocusStatusUsageDescription</key>
-    <string>SmartWindow shows in the notch when a Focus turns on or off.</string>
-
-    <!-- Supports Retina -->
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    
-    <!-- App Transport Security (allow all for future features) -->
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <false/>
-    </dict>
+	<key>CFBundleDisplayName</key>
+	<string>SmartWindow</string>
+	<key>CFBundleExecutable</key>
+	<string>SmartWindow</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.kevnnard.smartwindow</string>
+	<key>CFBundleName</key>
+	<string>SmartWindow</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.5.0</string>
+	<key>CFBundleVersion</key>
+	<string>11</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>SmartWindow needs Accessibility access to detect and manage your open windows, read window titles, and switch between them.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>SmartWindow asks Spotify and Music what is playing to show the current track in the notch.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>SmartWindow shows in the notch when a Focus turns on or off.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>
