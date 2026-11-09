@@ -18,14 +18,8 @@ final class LoginItemService: ObservableObject {
 
     convenience init() {
         self.init(status: {
-            guard Bundle.main.bundleURL.pathExtension == "app", Bundle.main.bundleIdentifier != nil else { return .unavailable }
-            switch SMAppService.mainApp.status {
-            case .enabled: return .enabled
-            case .notRegistered: return .disabled
-            case .requiresApproval: return .requiresApproval
-            case .notFound: return .unavailable
-            @unknown default: return .unavailable
-            }
+            let isAppBundle = Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil
+            return LoginItemService.status(of: SMAppService.mainApp.status, isAppBundle: isAppBundle)
         }, register: { try SMAppService.mainApp.register() },
            unregister: { try SMAppService.mainApp.unregister() },
            openSettings: { SMAppService.openSystemSettingsLoginItems() })
@@ -38,6 +32,19 @@ final class LoginItemService: ObservableObject {
         self.unregister = unregister
         self.openSettings = openSettings
         refresh()
+    }
+
+    /// What macOS reports, as the toggle shows it. An app bundle that was never registered gets
+    /// `notFound` from macOS ("record not found"); that is off and can be turned on, not unavailable.
+    /// Only a development executable (no app bundle) cannot launch at login.
+    nonisolated static func status(of native: SMAppService.Status, isAppBundle: Bool) -> Status {
+        guard isAppBundle else { return .unavailable }
+        switch native {
+        case .enabled: return .enabled
+        case .requiresApproval: return .requiresApproval
+        case .notRegistered, .notFound: return .disabled
+        @unknown default: return .disabled
+        }
     }
 
     func refresh() { status = readStatus() }
@@ -59,6 +66,8 @@ final class LoginItemService: ObservableObject {
             errorMessage = "macOS could not update launch at login: \(error.localizedDescription)"
         }
         refresh()
+        // macOS added it but wants the user to allow it: take them to Login Items.
+        if enabled, status == .requiresApproval, errorMessage == nil { openSettings() }
     }
 
     func openLoginSettings() { openSettings() }
