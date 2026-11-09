@@ -254,6 +254,10 @@ private struct GeneralPane: View {
         }
         .formStyle(.grouped)
         .onAppear { login.refresh() }
+        // Coming back from Login Items in System Settings.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            login.refresh()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login.refresh() }
     }
 }

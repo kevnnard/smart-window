@@ -34,6 +34,24 @@ struct LoginItemProbe {
         try check(service.status == .requiresApproval && removals == 1 && service.errorMessage != nil, "failure preserves actual state")
         fail = false; service.setEnabled(false)
         try check(service.errorMessage == nil, "successful retry clears error")
+        // macOS answers notFound for an app bundle that was never registered: that is off, not unavailable.
+        try check(LoginItemService.status(of: .notFound, isAppBundle: true) == .disabled, "never registered bundle can be turned on")
+        try check(LoginItemService.status(of: .notRegistered, isAppBundle: true) == .disabled, "not registered")
+        try check(LoginItemService.status(of: .enabled, isAppBundle: true) == .enabled, "enabled")
+        try check(LoginItemService.status(of: .requiresApproval, isAppBundle: true) == .requiresApproval, "approval")
+        try check(LoginItemService.status(of: .enabled, isAppBundle: false) == .unavailable, "a dev executable is unavailable")
+        try check(LoginItemService.status(of: .notFound, isAppBundle: false) == .unavailable, "a dev executable is unavailable")
+
+        // Turning it on when macOS asks for approval opens Login Items so the user can allow it.
+        var opened = 0
+        var approvalState = LoginItemService.Status.disabled
+        let approving = LoginItemService(status: { approvalState }, register: { approvalState = .requiresApproval },
+                                         unregister: { approvalState = .disabled }, openSettings: { opened += 1 })
+        approving.setEnabled(true)
+        try check(opened == 1 && approving.status == .requiresApproval, "approval needed opens Login Items")
+        approving.setEnabled(false)
+        try check(opened == 1 && approving.status == .disabled, "turning off does not open Settings")
+
         state = .unavailable
         service.setEnabled(true)
         try check(registrations == 2 && service.status == .unavailable, "unbundled state cannot register")
